@@ -1,88 +1,305 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="th">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Room Studio — 2D & 3D Room Planner</title>
-<link rel="stylesheet" href="style.css">
-</head>
-<body>
-<header class="topbar">
-  <div class="brand"><div class="brand-mark">⌂</div><div>Room Studio<small>2D SPACE PLANNER</small></div></div>
-  <div class="top-actions">
-    <button class="btn" id="undoBtn" title="ย้อนกลับ">↶ ย้อนกลับ</button>
-    <button class="btn" id="saveBtn">▣ บันทึกแบบ</button>
-    <button class="btn" id="loadBtn">↻ โหลดแบบ</button>
-    <button class="btn" id="exportBtn">↓ ส่งออก PNG</button>
-    <button class="btn primary" id="newBtn">＋ เริ่มแบบใหม่</button>
-  </div>
-</header>
-<main class="app">
-  <aside class="sidebar">
-    <h2 class="panel-heading">ออกแบบพื้นที่ของคุณ</h2><p class="sub">กำหนดขนาดห้อง เลือกสไตล์ แล้ววางเฟอร์นิเจอร์บนแปลน 2D</p>
-    <div class="section-label">รูปแบบห้อง</div>
-    <div class="style-grid" id="styleGrid">
-      <button class="style-btn active" data-style="modern"><span>◧</span>Modern</button>
-      <button class="style-btn" data-style="minimal"><span>○</span>Minimal</button>
-      <button class="style-btn" data-style="scandi"><span>⌂</span>Scandinavian</button>
-      <button class="style-btn" data-style="warm"><span>☼</span>Warm</button>
-    </div>
-    <div class="section-label">ขนาดห้อง (เมตร)</div>
-    <div class="two">
-      <div class="field"><label for="roomW">ความกว้าง</label><input id="roomW" type="number" min="3" max="12" step=".5" value="6"></div>
-      <div class="field"><label for="roomH">ความยาว</label><input id="roomH" type="number" min="3" max="12" step=".5" value="5"></div>
-    </div>
-    <div class="two">
-      <div class="field"><label for="floorColor">สีพื้น</label><input id="floorColor" type="color" value="#8b5e3c"></div>
-      <div class="field"><label for="wallColor">สีผนัง</label><input id="wallColor" type="color" value="#000000"></div>
-    </div>
-    <label class="checkline"><input id="showGrid" type="checkbox" checked> แสดงเส้นกริดและขนาด</label>
-    <div class="section-label">เพิ่มเฟอร์นิเจอร์</div>
-    <p class="sub">คลิกชิ้นที่ต้องการเพื่อเพิ่มลงในห้อง จากนั้นลากเพื่อจัดตำแหน่ง</p>
-    <div class="catalog">
-      <button class="furn" data-type="bed"><span class="emoji">🛏️</span><b>เตียงนอน</b><small>1.8 × 2 ม.</small></button>
-      <button class="furn" data-type="sofa"><span class="emoji">🛋️</span><b>โซฟา</b><small>2 × 0.9 ม.</small></button>
-      <button class="furn" data-type="desk"><span class="emoji">🖥️</span><b>โต๊ะทำงาน</b><small>1.2 × 0.6 ม.</small></button>
-      <button class="furn" data-type="dining"><span class="emoji">🍽️</span><b>โต๊ะอาหาร</b><small>1.4 × 0.8 ม.</small></button>
-      <button class="furn" data-type="wardrobe"><span class="emoji">🚪</span><b>ตู้เสื้อผ้า</b><small>1.2 × 0.6 ม.</small></button>
-      <button class="furn" data-type="tv"><span class="emoji">📺</span><b>ชั้นวางทีวี</b><small>1.5 × 0.4 ม.</small></button>
-      <button class="furn" data-type="plant"><span class="emoji">🪴</span><b>ต้นไม้</b><small>0.5 × 0.5 ม.</small></button>
-      <button class="furn" data-type="rug"><span class="emoji">▧</span><b>พรม</b><small>1.6 × 1.2 ม.</small></button>
-      <button class="furn" data-type="chair"><span class="emoji">🪑</span><b>เก้าอี้</b><small>0.6 × 0.6 ม.</small></button>
-      <button class="furn" data-type="lamp"><span class="emoji">💡</span><b>โคมไฟ</b><small>0.4 × 0.4 ม.</small></button>
-      <button class="furn" data-type="window"><span class="emoji">▤</span><b>หน้าต่าง</b><small>บนผนัง</small></button>
-      <button class="furn" data-type="door"><span class="emoji">🚪</span><b>ประตู</b><small>ทางเข้า</small></button>
-    </div>
-  </aside>
-  <section class="workspace">
-    <div class="workbar"><span><b id="roomTitle">ห้องของฉัน</b> <span style="color:#879088">·</span> <span id="roomMeta" class="hint">6 × 5 เมตร</span></span><div style="display:flex;gap:5px"><button class="btn primary" id="view2dBtn">2D แปลน</button><button class="btn" id="view3dBtn">3D มุมมอง</button></div></div>
-    <div class="canvas-wrap" id="canvas2dWrap"><canvas id="plan" width="900" height="720" aria-label="พื้นที่ออกแบบห้อง 2D"></canvas></div>
-    <div id="view3dWrap" style="display:none;flex:1;min-height:0;position:relative"><canvas id="plan3d" aria-label="โมเดลห้อง 3D" style="width:100%;height:100%;display:block;touch-action:none"></canvas><div style="position:absolute;left:14px;top:12px;background:#ffffffdd;padding:8px 11px;border-radius:8px;font-size:11px;color:#56615a;pointer-events:none">ลากเฟอร์นิเจอร์เพื่อย้าย · ลากพื้นที่ว่างเพื่อหมุน · เลื่อนเพื่อซูม</div></div>
-    <div class="bottom-hint" id="bottomHint">คลิกเพื่อเลือก · ลากเพื่อย้าย · ใช้แผงด้านขวาเพื่อหมุนหรือลบ</div>
-  </section>
-  <aside class="sidebar rightbar">
-    <h2 class="panel-heading">คุณสมบัติ</h2><p class="sub">เลือกเฟอร์นิเจอร์ในแปลนเพื่อแก้ไข</p>
-    <div id="nothingSelected" class="empty">ยังไม่ได้เลือกวัตถุ<br>คลิกเฟอร์นิเจอร์บนแปลนเพื่อแก้ไขตำแหน่ง สี และการหมุน</div>
-    <div id="objectEditor" hidden>
-      <div class="field"><label>ชื่อวัตถุ</label><input id="objectName" type="text" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:8px"></div>
-      <div class="two">
-        <div class="field"><label>ความกว้าง (ม.)</label><input id="objectW" type="number" min=".2" max="5" step=".1"></div>
-        <div class="field"><label>ความลึก (ม.)</label><input id="objectH" type="number" min=".2" max="5" step=".1"></div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Room Studio — 2D & 3D Room Planner</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">⌂</div>
+        <div>Room Studio<small>2D SPACE PLANNER</small></div>
       </div>
-      <div class="field"><label>สีวัตถุ</label><input id="objectColor" type="color" value="#b5a18a"></div>
-      <div class="field"><label>หมุนวัตถุ</label><div class="selected-actions"><button class="btn" id="rotateLeft">↶ -15°</button><button class="btn" id="rotateRight">↷ +15°</button></div></div>
-      <div class="field"><label>ตำแหน่ง (เมตร)</label><div class="two"><input id="objectX" type="number" step=".1" aria-label="ตำแหน่ง X"><input id="objectY" type="number" step=".1" aria-label="ตำแหน่ง Y"></div></div>
-      <button class="btn danger wide" id="deleteBtn">ลบเฟอร์นิเจอร์ชิ้นนี้</button>
-    </div>
-    <div class="divider"></div>
-    <div class="section-label">สรุปพื้นที่</div>
-    <div style="display:flex;justify-content:space-between;font-size:13px;margin:9px 0"><span style="color:var(--muted)">พื้นที่ห้อง</span><b id="areaValue">30 ตร.ม.</b></div>
-    <div style="display:flex;justify-content:space-between;font-size:13px;margin:9px 0"><span style="color:var(--muted)">จำนวนเฟอร์นิเจอร์</span><b id="itemCount">0 ชิ้น</b></div>
-    <p class="sub" style="margin-top:18px">คำแนะนำ: เว้นทางเดินให้กว้างประมาณ 80–90 ซม. และตรวจสอบขนาดเฟอร์นิเจอร์จริงก่อนใช้งาน</p>
-    <div id="status" class="status" role="status"></div>
-  </aside>
-</main>
-<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js"}}</script>
-<script type="module" src="app.js"></script>
-</body>
+      <div class="top-actions">
+        <button class="btn" id="undoBtn" title="ย้อนกลับ">↶ ย้อนกลับ</button>
+        <button class="btn" id="saveBtn">▣ บันทึกแบบ</button>
+        <button class="btn" id="loadBtn">↻ โหลดแบบ</button>
+        <button class="btn" id="exportBtn">↓ ส่งออก PNG</button>
+        <button class="btn primary" id="newBtn">＋ เริ่มแบบใหม่</button>
+      </div>
+    </header>
+    <main class="app">
+      <aside class="sidebar">
+        <h2 class="panel-heading">ออกแบบพื้นที่ของคุณ</h2>
+        <p class="sub">กำหนดขนาดห้อง เลือกสไตล์ แล้ววางเฟอร์นิเจอร์บนแปลน 2D</p>
+        <div class="section-label">รูปแบบห้อง</div>
+        <div class="style-grid" id="styleGrid">
+          <button class="style-btn active" data-style="modern">
+            <span>◧</span>Modern
+          </button>
+          <button class="style-btn" data-style="minimal">
+            <span>○</span>Minimal
+          </button>
+          <button class="style-btn" data-style="scandi">
+            <span>⌂</span>Scandinavian
+          </button>
+          <button class="style-btn" data-style="warm">
+            <span>☼</span>Warm
+          </button>
+        </div>
+        <div class="section-label">เลือกประเภทห้อง</div>
+        <div class="room-template-grid" id="roomTemplates">
+          <button class="room-template active" data-template="bedroom">
+            <span class="template-icon">🛏️</span><b>ห้องนอน</b
+            ><small>6 × 5 ม.</small>
+          </button>
+          <button class="room-template" data-template="living">
+            <span class="template-icon">🛋️</span><b>ห้องนั่งเล่น</b
+            ><small>6 × 5 ม.</small>
+          </button>
+          <button class="room-template" data-template="office">
+            <span class="template-icon">🖥️</span><b>ห้องทำงาน</b
+            ><small>5 × 4 ม.</small>
+          </button>
+        </div>
+        <p class="sub template-help">
+          เลือกแบบเพื่อจัดวางเฟอร์นิเจอร์เริ่มต้นอัตโนมัติ
+        </p>
+        <div class="section-label">ขนาดห้อง (เมตร)</div>
+        <div class="two">
+          <div class="field">
+            <label for="roomW">ความกว้าง</label
+            ><input
+              id="roomW"
+              type="number"
+              min="3"
+              max="12"
+              step=".5"
+              value="6"
+            />
+          </div>
+          <div class="field">
+            <label for="roomH">ความยาว</label
+            ><input
+              id="roomH"
+              type="number"
+              min="3"
+              max="12"
+              step=".5"
+              value="5"
+            />
+          </div>
+        </div>
+        <div class="two">
+          <div class="field">
+            <label for="floorColor">สีพื้น</label
+            ><input id="floorColor" type="color" value="#8b5e3c" />
+          </div>
+          <div class="field">
+            <label for="wallColor">สีผนัง</label
+            ><input id="wallColor" type="color" value="#000000" />
+          </div>
+        </div>
+        <label class="checkline"
+          ><input id="showGrid" type="checkbox" checked />
+          แสดงเส้นกริดและขนาด</label
+        >
+        <div class="section-label">เพิ่มเฟอร์นิเจอร์</div>
+        <p class="sub">
+          คลิกชิ้นที่ต้องการเพื่อเพิ่มลงในห้อง จากนั้นลากเพื่อจัดตำแหน่ง
+        </p>
+        <div class="catalog">
+          <button class="furn" data-type="bed">
+            <span class="emoji">🛏️</span><b>เตียงนอน</b
+            ><small>1.8 × 2 ม.</small>
+          </button>
+          <button class="furn" data-type="sofa">
+            <span class="emoji">🛋️</span><b>โซฟา</b><small>2 × 0.9 ม.</small>
+          </button>
+          <button class="furn" data-type="desk">
+            <span class="emoji">🖥️</span><b>โต๊ะทำงาน</b
+            ><small>1.2 × 0.6 ม.</small>
+          </button>
+          <button class="furn" data-type="dining">
+            <span class="emoji">🍽️</span><b>โต๊ะอาหาร</b
+            ><small>1.4 × 0.8 ม.</small>
+          </button>
+          <button class="furn" data-type="wardrobe">
+            <span class="emoji">🚪</span><b>ตู้เสื้อผ้า</b
+            ><small>1.2 × 0.6 ม.</small>
+          </button>
+          <button class="furn" data-type="tv">
+            <span class="emoji">📺</span><b>ชั้นวางทีวี</b
+            ><small>1.5 × 0.4 ม.</small>
+          </button>
+          <button class="furn" data-type="plant">
+            <span class="emoji">🪴</span><b>ต้นไม้</b
+            ><small>0.5 × 0.5 ม.</small>
+          </button>
+          <button class="furn" data-type="rug">
+            <span class="emoji">▧</span><b>พรม</b><small>1.6 × 1.2 ม.</small>
+          </button>
+          <button class="furn" data-type="chair">
+            <span class="emoji">🪑</span><b>เก้าอี้</b
+            ><small>0.6 × 0.6 ม.</small>
+          </button>
+          <button class="furn" data-type="lamp">
+            <span class="emoji">💡</span><b>โคมไฟ</b><small>0.4 × 0.4 ม.</small>
+          </button>
+          <button class="furn" data-type="window">
+            <span class="emoji">▤</span><b>หน้าต่าง</b><small>บนผนัง</small>
+          </button>
+          <button class="furn" data-type="door">
+            <span class="emoji">🚪</span><b>ประตู</b><small>ทางเข้า</small>
+          </button>
+        </div>
+      </aside>
+      <section class="workspace">
+        <div class="workbar">
+          <span
+            ><b id="roomTitle">ห้องของฉัน</b>
+            <span style="color: #879088">·</span>
+            <span id="roomMeta" class="hint">6 × 5 เมตร</span></span
+          >
+          <div style="display: flex; gap: 5px">
+            <button class="btn primary" id="view2dBtn">2D แปลน</button
+            ><button class="btn" id="view3dBtn">3D มุมมอง</button>
+          </div>
+        </div>
+        <div class="canvas-wrap" id="canvas2dWrap">
+          <canvas
+            id="plan"
+            width="900"
+            height="720"
+            aria-label="พื้นที่ออกแบบห้อง 2D"
+          ></canvas>
+        </div>
+        <div
+          id="view3dWrap"
+          style="display: none; flex: 1; min-height: 0; position: relative"
+        >
+          <canvas
+            id="plan3d"
+            aria-label="โมเดลห้อง 3D"
+            style="
+              width: 100%;
+              height: 100%;
+              display: block;
+              touch-action: none;
+            "
+          ></canvas>
+          <div
+            style="
+              position: absolute;
+              left: 14px;
+              top: 12px;
+              background: #ffffffdd;
+              padding: 8px 11px;
+              border-radius: 8px;
+              font-size: 11px;
+              color: #56615a;
+              pointer-events: none;
+            "
+          >
+            ลากเฟอร์นิเจอร์เพื่อย้าย · ลากพื้นที่ว่างเพื่อหมุน · เลื่อนเพื่อซูม
+          </div>
+        </div>
+        <div class="bottom-hint" id="bottomHint">
+          คลิกเพื่อเลือก · ลากเพื่อย้าย · ใช้แผงด้านขวาเพื่อหมุนหรือลบ
+        </div>
+      </section>
+      <aside class="sidebar rightbar">
+        <h2 class="panel-heading">คุณสมบัติ</h2>
+        <p class="sub">เลือกเฟอร์นิเจอร์ในแปลนเพื่อแก้ไข</p>
+        <div id="nothingSelected" class="empty">
+          ยังไม่ได้เลือกวัตถุ<br />คลิกเฟอร์นิเจอร์บนแปลนเพื่อแก้ไขตำแหน่ง สี
+          และการหมุน
+        </div>
+        <div id="objectEditor" hidden>
+          <div class="field">
+            <label>ชื่อวัตถุ</label
+            ><input
+              id="objectName"
+              type="text"
+              style="
+                width: 100%;
+                border: 1px solid var(--line);
+                border-radius: 8px;
+                padding: 8px;
+              "
+            />
+          </div>
+          <div class="two">
+            <div class="field">
+              <label>ความกว้าง (ม.)</label
+              ><input id="objectW" type="number" min=".2" max="5" step=".1" />
+            </div>
+            <div class="field">
+              <label>ความลึก (ม.)</label
+              ><input id="objectH" type="number" min=".2" max="5" step=".1" />
+            </div>
+          </div>
+          <div class="field">
+            <label>สีวัตถุ</label
+            ><input id="objectColor" type="color" value="#b5a18a" />
+          </div>
+          <div class="field">
+            <label>หมุนวัตถุ</label>
+            <div class="selected-actions">
+              <button class="btn" id="rotateLeft">↶ -15°</button
+              ><button class="btn" id="rotateRight">↷ +15°</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>ตำแหน่ง (เมตร)</label>
+            <div class="two">
+              <input
+                id="objectX"
+                type="number"
+                step=".1"
+                aria-label="ตำแหน่ง X"
+              /><input
+                id="objectY"
+                type="number"
+                step=".1"
+                aria-label="ตำแหน่ง Y"
+              />
+            </div>
+          </div>
+          <button class="btn danger wide" id="deleteBtn">
+            ลบเฟอร์นิเจอร์ชิ้นนี้
+          </button>
+        </div>
+        <div class="divider"></div>
+        <div class="section-label">สรุปพื้นที่</div>
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            margin: 9px 0;
+          "
+        >
+          <span style="color: var(--muted)">พื้นที่ห้อง</span
+          ><b id="areaValue">30 ตร.ม.</b>
+        </div>
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            margin: 9px 0;
+          "
+        >
+          <span style="color: var(--muted)">จำนวนเฟอร์นิเจอร์</span
+          ><b id="itemCount">0 ชิ้น</b>
+        </div>
+        <p class="sub" style="margin-top: 18px">
+          คำแนะนำ: เว้นทางเดินให้กว้างประมาณ 80–90 ซม.
+          และตรวจสอบขนาดเฟอร์นิเจอร์จริงก่อนใช้งาน
+        </p>
+        <div id="status" class="status" role="status"></div>
+      </aside>
+    </main>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js"
+        }
+      }
+    </script>
+    <script type="module" src="app.js"></script>
+  </body>
 </html>
