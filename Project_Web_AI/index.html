@@ -10,7 +10,7 @@
     <header class="topbar">
       <div class="brand">
         <div class="brand-mark">⌂</div>
-        <div>Room Studio<small>2D SPACE PLANNER</small></div>
+        <div>Room Studio<small>SPACE PLANNER</small></div>
       </div>
       <div class="top-actions">
         <button class="btn" id="undoBtn" title="ย้อนกลับ">↶ ย้อนกลับ</button>
@@ -22,8 +22,124 @@
     </header>
     <main class="app">
       <aside class="sidebar">
-        <h2 class="panel-heading">ออกแบบพื้นที่ของคุณ</h2>
-        <p class="sub">กำหนดขนาดห้อง เลือกสไตล์ แล้ววางเฟอร์นิเจอร์บนแปลน 2D</p>
+        <h2 class="panel-heading">เลือกสินค้า</h2>
+        <p class="sub">เลือกสินค้าเพื่อเพิ่มลงในห้อง แล้วลากจัดวางในฉาก 3D</p>
+        <div class="catalog-tools">
+          <input
+            id="catalogSearch"
+            type="search"
+            placeholder="ค้นหาสินค้า"
+            aria-label="ค้นหาเฟอร์นิเจอร์"
+          />
+          <div class="catalog-filters" role="group" aria-label="หมวดสินค้า">
+            <button class="catalog-filter active" data-category="all" type="button" aria-pressed="true">ทั้งหมด</button>
+            <button class="catalog-filter" data-category="furniture" type="button" aria-pressed="false">เฟอร์นิเจอร์</button>
+            <button class="catalog-filter" data-category="decor" type="button" aria-pressed="false">ของตกแต่ง</button>
+            <button class="catalog-filter" data-category="room" type="button" aria-pressed="false">ห้อง</button>
+          </div>
+        </div>
+        <div class="catalog" id="catalog">
+          <button class="furn" data-type="bed" data-category="furniture">
+            <span class="emoji">🛏️</span><b>เตียงนอน</b
+            ><small>1.8 × 2 ม.</small>
+          </button>
+          <button class="furn" data-type="sofa" data-category="furniture">
+            <span class="emoji">🛋️</span><b>โซฟา</b><small>2 × 0.9 ม.</small>
+          </button>
+          <button class="furn" data-type="desk" data-category="furniture">
+            <span class="emoji">🖥️</span><b>โต๊ะทำงาน</b
+            ><small>1.2 × 0.6 ม.</small>
+          </button>
+          <button class="furn" data-type="dining" data-category="furniture">
+            <span class="emoji">🍽️</span><b>โต๊ะอาหาร</b
+            ><small>1.4 × 0.8 ม.</small>
+          </button>
+          <button class="furn" data-type="wardrobe" data-category="furniture">
+            <span class="emoji">🚪</span><b>ตู้เสื้อผ้า</b
+            ><small>1.2 × 0.6 ม.</small>
+          </button>
+          <button class="furn" data-type="tv" data-category="furniture">
+            <span class="emoji">📺</span><b>ชั้นวางทีวี</b
+            ><small>1.5 × 0.4 ม.</small>
+          </button>
+          <button class="furn" data-type="plant" data-category="decor">
+            <span class="emoji">🪴</span><b>ต้นไม้</b
+            ><small>0.5 × 0.5 ม.</small>
+          </button>
+          <button class="furn" data-type="rug" data-category="decor">
+            <span class="emoji">▧</span><b>พรม</b><small>1.6 × 1.2 ม.</small>
+          </button>
+          <button class="furn" data-type="chair" data-category="furniture">
+            <span class="emoji">🪑</span><b>เก้าอี้</b
+            ><small>0.6 × 0.6 ม.</small>
+          </button>
+          <button class="furn" data-type="lamp" data-category="decor">
+            <span class="emoji">💡</span><b>โคมไฟ</b><small>0.4 × 0.4 ม.</small>
+          </button>
+          <button class="furn" data-type="window" data-category="room">
+            <span class="emoji">▤</span><b>หน้าต่าง</b><small>บนผนัง</small>
+          </button>
+          <button class="furn" data-type="door" data-category="room">
+            <span class="emoji">🚪</span><b>ประตู</b><small>ทางเข้า</small>
+          </button>
+        </div>
+        <p class="sub catalog-empty" id="catalogEmpty" hidden>ไม่พบสินค้าที่ค้นหา</p>
+        <div class="divider"></div>
+        <div class="section-label">ประเภทห้อง</div>
+        <div class="room-template-grid" id="roomTemplates">
+          <button class="room-template active" data-template="bedroom">
+            <span class="template-icon">🛏️</span><b>ห้องนอน</b
+            ><small>4 × 3.5 ม.</small>
+          </button>
+          <button class="room-template" data-template="living">
+            <span class="template-icon">🛋️</span><b>ห้องนั่งเล่น</b
+            ><small>4.5 × 4 ม.</small>
+          </button>
+          <button class="room-template" data-template="office">
+            <span class="template-icon">🖥️</span><b>ห้องทำงาน</b
+            ><small>3.5 × 3 ม.</small>
+          </button>
+        </div>
+        <p class="sub template-help">เลือกแบบเพื่อเริ่มจากการจัดวางที่เตรียมไว้</p>
+        <div class="section-label">ขนาดห้อง (เมตร)</div>
+        <div class="two">
+          <div class="field">
+            <label for="roomW">ความกว้าง</label
+            ><input
+              id="roomW"
+              type="number"
+              min="3"
+              max="12"
+              step=".5"
+              value="3.5"
+            />
+          </div>
+          <div class="field">
+            <label for="roomH">ความยาว</label
+            ><input
+              id="roomH"
+              type="number"
+              min="3"
+              max="12"
+              step=".5"
+              value="3.5"
+            />
+          </div>
+        </div>
+        <div class="two">
+          <div class="field">
+            <label for="floorColor">สีพื้น</label
+            ><input id="floorColor" type="color" value="#8b5e3c" />
+          </div>
+          <div class="field">
+            <label for="wallColor">สีผนัง</label
+            ><input id="wallColor" type="color" value="#f4f2ec" />
+          </div>
+        </div>
+        <label class="checkline"
+          ><input id="showGrid" type="checkbox" checked />
+          แสดงเส้นกริดและขนาด</label
+        >
         <div class="section-label">รูปแบบห้อง</div>
         <div class="style-grid" id="styleGrid">
           <button class="style-btn active" data-style="modern">
@@ -39,126 +155,20 @@
             <span>☼</span>Warm
           </button>
         </div>
-        <div class="section-label">เลือกประเภทห้อง</div>
-        <div class="room-template-grid" id="roomTemplates">
-          <button class="room-template active" data-template="bedroom">
-            <span class="template-icon">🛏️</span><b>ห้องนอน</b
-            ><small>6 × 5 ม.</small>
-          </button>
-          <button class="room-template" data-template="living">
-            <span class="template-icon">🛋️</span><b>ห้องนั่งเล่น</b
-            ><small>6 × 5 ม.</small>
-          </button>
-          <button class="room-template" data-template="office">
-            <span class="template-icon">🖥️</span><b>ห้องทำงาน</b
-            ><small>5 × 4 ม.</small>
-          </button>
-        </div>
-        <p class="sub template-help">
-          เลือกแบบเพื่อจัดวางเฟอร์นิเจอร์เริ่มต้นอัตโนมัติ
-        </p>
-        <div class="section-label">ขนาดห้อง (เมตร)</div>
-        <div class="two">
-          <div class="field">
-            <label for="roomW">ความกว้าง</label
-            ><input
-              id="roomW"
-              type="number"
-              min="3"
-              max="12"
-              step=".5"
-              value="6"
-            />
-          </div>
-          <div class="field">
-            <label for="roomH">ความยาว</label
-            ><input
-              id="roomH"
-              type="number"
-              min="3"
-              max="12"
-              step=".5"
-              value="5"
-            />
-          </div>
-        </div>
-        <div class="two">
-          <div class="field">
-            <label for="floorColor">สีพื้น</label
-            ><input id="floorColor" type="color" value="#8b5e3c" />
-          </div>
-          <div class="field">
-            <label for="wallColor">สีผนัง</label
-            ><input id="wallColor" type="color" value="#000000" />
-          </div>
-        </div>
-        <label class="checkline"
-          ><input id="showGrid" type="checkbox" checked />
-          แสดงเส้นกริดและขนาด</label
-        >
-        <div class="section-label">เพิ่มเฟอร์นิเจอร์</div>
-        <p class="sub">
-          คลิกชิ้นที่ต้องการเพื่อเพิ่มลงในห้อง จากนั้นลากเพื่อจัดตำแหน่ง
-        </p>
-        <div class="catalog">
-          <button class="furn" data-type="bed">
-            <span class="emoji">🛏️</span><b>เตียงนอน</b
-            ><small>1.8 × 2 ม.</small>
-          </button>
-          <button class="furn" data-type="sofa">
-            <span class="emoji">🛋️</span><b>โซฟา</b><small>2 × 0.9 ม.</small>
-          </button>
-          <button class="furn" data-type="desk">
-            <span class="emoji">🖥️</span><b>โต๊ะทำงาน</b
-            ><small>1.2 × 0.6 ม.</small>
-          </button>
-          <button class="furn" data-type="dining">
-            <span class="emoji">🍽️</span><b>โต๊ะอาหาร</b
-            ><small>1.4 × 0.8 ม.</small>
-          </button>
-          <button class="furn" data-type="wardrobe">
-            <span class="emoji">🚪</span><b>ตู้เสื้อผ้า</b
-            ><small>1.2 × 0.6 ม.</small>
-          </button>
-          <button class="furn" data-type="tv">
-            <span class="emoji">📺</span><b>ชั้นวางทีวี</b
-            ><small>1.5 × 0.4 ม.</small>
-          </button>
-          <button class="furn" data-type="plant">
-            <span class="emoji">🪴</span><b>ต้นไม้</b
-            ><small>0.5 × 0.5 ม.</small>
-          </button>
-          <button class="furn" data-type="rug">
-            <span class="emoji">▧</span><b>พรม</b><small>1.6 × 1.2 ม.</small>
-          </button>
-          <button class="furn" data-type="chair">
-            <span class="emoji">🪑</span><b>เก้าอี้</b
-            ><small>0.6 × 0.6 ม.</small>
-          </button>
-          <button class="furn" data-type="lamp">
-            <span class="emoji">💡</span><b>โคมไฟ</b><small>0.4 × 0.4 ม.</small>
-          </button>
-          <button class="furn" data-type="window">
-            <span class="emoji">▤</span><b>หน้าต่าง</b><small>บนผนัง</small>
-          </button>
-          <button class="furn" data-type="door">
-            <span class="emoji">🚪</span><b>ประตู</b><small>ทางเข้า</small>
-          </button>
-        </div>
       </aside>
       <section class="workspace">
         <div class="workbar">
           <span
             ><b id="roomTitle">ห้องของฉัน</b>
             <span style="color: #879088">·</span>
-            <span id="roomMeta" class="hint">6 × 5 เมตร</span></span
+            <span id="roomMeta" class="hint">3.5 × 3.5 เมตร</span></span
           >
           <div style="display: flex; gap: 5px">
-            <button class="btn primary" id="view2dBtn">2D แปลน</button
-            ><button class="btn" id="view3dBtn">3D มุมมอง</button>
+            <button class="btn" id="view2dBtn">2D แปลน</button
+            ><button class="btn primary" id="view3dBtn">3D มุมมอง</button>
           </div>
         </div>
-        <div class="canvas-wrap" id="canvas2dWrap">
+        <div class="canvas-wrap" id="canvas2dWrap" style="display: none">
           <canvas
             id="plan"
             width="900"
@@ -168,7 +178,7 @@
         </div>
         <div
           id="view3dWrap"
-          style="display: none; flex: 1; min-height: 0; position: relative"
+          style="display: block; flex: 1; min-height: 0; position: relative"
         >
           <canvas
             id="plan3d"
@@ -197,7 +207,7 @@
           </div>
         </div>
         <div class="bottom-hint" id="bottomHint">
-          คลิกเพื่อเลือก · ลากเพื่อย้าย · ใช้แผงด้านขวาเพื่อหมุนหรือลบ
+          ลากเฟอร์นิเจอร์เพื่อย้าย · ลากพื้นที่ว่างเพื่อหมุน · เลื่อนเพื่อซูม
         </div>
       </section>
       <aside class="sidebar rightbar">

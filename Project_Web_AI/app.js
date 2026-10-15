@@ -1,13 +1,12 @@
 import * as THREE from "three";
 import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/controls/OrbitControls.js";
-import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js";
 
 (() => {
   const canvas = document.getElementById("plan"),
     ctx = canvas.getContext("2d");
   const $ = (id) => document.getElementById(id);
   const palettes = {
-    modern: { floor: "#8b5e3c", wall: "#000000", furniture: "#82958a" },
+    modern: { floor: "#8b5e3c", wall: "#f4f2ec", furniture: "#82958a" },
     minimal: { floor: "#eeeeea", wall: "#ffffff", furniture: "#c9c9c2" },
     scandi: { floor: "#e8d6bb", wall: "#fbf8f0", furniture: "#b5a18a" },
     warm: { floor: "#cda984", wall: "#f5e8d6", furniture: "#9b6c4e" },
@@ -45,10 +44,10 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     door: { name: "ประตู", w: 0.9, h: 0.12, color: "#8b6246", kind: "door" },
   };
   let room = {
-    w: 6,
-    h: 5,
+    w: 3.5,
+    h: 3.5,
     floor: "#8b5e3c",
-    wall: "#000000",
+    wall: "#f4f2ec",
     style: "modern",
     grid: true,
   };
@@ -63,26 +62,36 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     controls3d = null,
     raycaster3d = null,
     mouse3d = null,
-    objectMeshes = [];
+    objectMeshes = [],
+    framedRoom3D = null;
   function init3D() {
     const c = $("plan3d");
     scene3d = new THREE.Scene();
     scene3d.background = new THREE.Color("#eef1ed");
     camera3d = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
-    camera3d.position.set(room.w * 1.35, room.h * 1.15, room.w * 1.5);
     renderer3d = new THREE.WebGLRenderer({ canvas: c, antialias: true });
     renderer3d.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer3d.shadowMap.enabled = true;
     renderer3d.outputColorSpace = THREE.SRGBColorSpace;
+    renderer3d.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer3d.toneMappingExposure = 1.1;
     controls3d = new OrbitControls(camera3d, c);
     controls3d.enableDamping = true;
-    controls3d.target.set(room.w / 2, 0, room.h / 2);
+    frameCamera3D();
     raycaster3d = new THREE.Raycaster();
     mouse3d = new THREE.Vector2();
     scene3d.add(new THREE.HemisphereLight(0xffffff, 0x9a907e, 2));
     const light = new THREE.DirectionalLight(0xffffff, 2);
     light.position.set(-room.w, room.h * 2, room.h);
-    scene3d.add(light);
+    light.target.position.set(room.w / 2, 0, room.h / 2);
+    light.castShadow = true;
+    light.shadow.mapSize.set(1024, 1024);
+    light.shadow.camera.left = -room.w;
+    light.shadow.camera.right = room.w;
+    light.shadow.camera.top = room.h;
+    light.shadow.camera.bottom = -room.h;
+    light.shadow.camera.updateProjectionMatrix();
+    scene3d.add(light, light.target);
     resize3D();
     animate3D();
   }
@@ -94,6 +103,17 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     renderer3d.setSize(w, h, false);
     camera3d.aspect = w / h;
     camera3d.updateProjectionMatrix();
+  }
+  function frameCamera3D() {
+    const size = Math.max(room.w, room.h);
+    camera3d.position.set(
+      room.w / 2 + size * 0.25,
+      size * 1.1,
+      room.h / 2 + size * 1.1,
+    );
+    controls3d.target.set(room.w / 2, 0, room.h / 2);
+    controls3d.update();
+    framedRoom3D = `${room.w}x${room.h}`;
   }
   let dragging3d = null;
   function pointerToFloor(e) {
@@ -114,144 +134,6 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     requestAnimationFrame(animate3D);
     controls3d.update();
     renderer3d.render(scene3d, camera3d);
-  }
-  function render3D() {
-    if (!scene3d) return;
-    while (scene3d.children.length > 2) {
-      const o = scene3d.children[2];
-      scene3d.remove(o);
-      o.traverse?.((n) => {
-        if (n.geometry) n.geometry.dispose();
-        if (n.material) {
-          if (Array.isArray(n.material)) n.material.forEach((m) => m.dispose());
-          else n.material.dispose();
-        }
-      });
-      if (o.geometry) o.geometry.dispose();
-      if (o.material) {
-        if (Array.isArray(o.material)) o.material.forEach((m) => m.dispose());
-        else o.material.dispose();
-      }
-    }
-    objectMeshes = [];
-    const mat = (color, roughness = 0.85) =>
-      new THREE.MeshStandardMaterial({ color: color || "#b5a18a", roughness });
-    function box(parent, w, h, d, color, x, y, z) {
-      const mesh = new THREE.Mesh(
-        new THREE.BoxGeometry(
-          Math.max(0.04, w),
-          Math.max(0.04, h),
-          Math.max(0.04, d),
-        ),
-        mat(color),
-      );
-      mesh.position.set(x, y, z);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      parent.add(mesh);
-      return mesh;
-    }
-    function flatBox(parent, w, h, d, color, x, y, z) {
-      const mesh = new THREE.Mesh(
-        new THREE.BoxGeometry(
-          Math.max(0.04, w),
-          Math.max(0.04, h),
-          Math.max(0.04, d),
-        ),
-        new THREE.MeshBasicMaterial({ color: color || "#b5a18a" }),
-      );
-      mesh.position.set(x, y, z);
-      parent.add(mesh);
-      return mesh;
-    }
-    flatBox(
-      scene3d,
-      room.w,
-      0.12,
-      room.h,
-      room.floor,
-      room.w / 2,
-      -0.06,
-      room.h / 2,
-    );
-    const wallH = 2.6,
-      th = 0.12;
-    flatBox(scene3d, room.w, wallH, th, room.wall, room.w / 2, wallH / 2, 0);
-    flatBox(scene3d, th, wallH, room.h, room.wall, 0, wallH / 2, room.h / 2);
-    flatBox(
-      scene3d,
-      th,
-      wallH,
-      room.h,
-      room.wall,
-      room.w,
-      wallH / 2,
-      room.h / 2,
-    );
-    items.forEach((it) => {
-      const group = new THREE.Group();
-      group.position.set(it.x + it.w / 2, 0, it.y + it.h / 2);
-      group.rotation.y = -(it.rot || 0);
-      group.userData.itemId = it.id;
-      const w = it.w,
-        d = it.h,
-        color = it.color;
-      let height = 0.75;
-      if (it.kind === "bed") {
-        height = 0.45;
-        box(group, w, height, d, color, 0, height / 2, 0);
-        box(
-          group,
-          w * 0.92,
-          0.16,
-          d * 0.22,
-          "#f7f2e9",
-          0,
-          height + 0.08,
-          -d * 0.34,
-        );
-      } else if (it.kind === "sofa") {
-        height = 0.65;
-        box(group, w, 0.28, d, color, 0, 0.25, 0);
-        box(group, w, 0.55, 0.18, color, 0, 0.62, -d * 0.4);
-        box(group, 0.16, 0.45, d, color, -w * 0.43, 0.48, 0);
-        box(group, 0.16, 0.45, d, color, w * 0.43, 0.48, 0);
-      } else if (it.kind === "plant") {
-        height = 0.55;
-        box(group, w * 0.75, 0.35, d * 0.75, "#b87852", 0, 0.18, 0);
-        const leaf = new THREE.Mesh(
-          new THREE.SphereGeometry(0.28, 12, 10),
-          mat("#548260"),
-        );
-        leaf.position.set(0, 0.58, 0);
-        group.add(leaf);
-      } else if (it.kind === "chair" || it.kind === "lamp") {
-        height = it.kind === "chair" ? 0.5 : 0.8;
-        box(group, w, 0.12, d, color, 0, 0.4, 0);
-        if (it.kind === "chair") box(group, 0.12, 0.35, 0.12, color, 0, 0.2, 0);
-      } else if (it.kind === "window" || it.kind === "door") {
-        height = it.kind === "door" ? 2.05 : 1.1;
-        box(group, w, height, 0.06, color, 0, height / 2, 0);
-      } else {
-        height = it.kind === "wardrobe" ? 2 : it.kind === "tv" ? 0.65 : 0.75;
-        box(group, w, height, d, color, 0, height / 2, 0);
-        if (it.kind === "tv")
-          box(
-            group,
-            w * 0.75,
-            0.42,
-            0.04,
-            "#252a28",
-            0,
-            height * 0.7,
-            -d / 2 - 0.025,
-          );
-      }
-      scene3d.add(group);
-      objectMeshes.push({ mesh: group, it });
-    });
-    controls3d.target.set(room.w / 2, 0, room.h / 2);
-    controls3d.update();
   }
   function snapshot() {
     history.push(
@@ -274,6 +156,15 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
       [-hw, hh],
     ].map(([x, y]) => [cx + x * c - y * s, cy + x * s + y * c]);
   }
+  function insideRoom(it) {
+    return corners(it).every(
+      ([x, y]) =>
+        x >= -0.0001 &&
+        y >= -0.0001 &&
+        x <= room.w + 0.0001 &&
+        y <= room.h + 0.0001,
+    );
+  }
   function overlaps(a, b) {
     if (a.kind === "rug" || b.kind === "rug") return false;
     const A = corners(a),
@@ -294,13 +185,7 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     return true;
   }
   function canPlace(candidate, ignoreId = candidate.id) {
-    if (
-      candidate.x < 0 ||
-      candidate.y < 0 ||
-      candidate.x + candidate.w > room.w + 0.0001 ||
-      candidate.y + candidate.h > room.h + 0.0001
-    )
-      return false;
+    if (!insideRoom(candidate)) return false;
     return !items.some(
       (other) => other.id !== ignoreId && overlaps(candidate, other),
     );
@@ -535,10 +420,10 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     if (selected && selected.id === it.id) {
       ctx.setLineDash([5, 3]);
       ctx.lineWidth = 2;
-      ctx.strokeStyle = "#176b50";
+      ctx.strokeStyle = "#0058a3";
       ctx.strokeRect(-w / 2 - 4, -h / 2 - 4, w + 8, h + 8);
       ctx.setLineDash([]);
-      ctx.fillStyle = "#176b50";
+      ctx.fillStyle = "#0058a3";
       ctx.beginPath();
       ctx.arc(w / 2 + 4, -h / 2 - 4, 4, 0, Math.PI * 2);
       ctx.fill();
@@ -781,6 +666,31 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
   document
     .querySelectorAll(".furn")
     .forEach((b) => b.addEventListener("click", () => addItem(b.dataset.type)));
+  let catalogCategory = "all";
+  function filterCatalog() {
+    const query = $("catalogSearch").value.trim().toLocaleLowerCase();
+    let visible = 0;
+    document.querySelectorAll(".furn").forEach((button) => {
+      const matches =
+        (catalogCategory === "all" || button.dataset.category === catalogCategory) &&
+        button.textContent.toLocaleLowerCase().includes(query);
+      button.hidden = !matches;
+      if (matches) visible++;
+    });
+    $("catalogEmpty").hidden = visible > 0;
+  }
+  $("catalogSearch").addEventListener("input", filterCatalog);
+  document.querySelectorAll(".catalog-filter").forEach((button) =>
+    button.addEventListener("click", () => {
+      catalogCategory = button.dataset.category;
+      document.querySelectorAll(".catalog-filter").forEach((filter) => {
+        const active = filter === button;
+        filter.classList.toggle("active", active);
+        filter.setAttribute("aria-pressed", active);
+      });
+      filterCatalog();
+    }),
+  );
   document.querySelectorAll(".style-btn").forEach((b) =>
     b.addEventListener("click", () => {
       snapshot();
@@ -801,46 +711,44 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
   const roomTemplates = {
     bedroom: {
       name: "ห้องนอน",
-      w: 6,
-      h: 5,
+      w: 4,
+      h: 3.5,
       style: "scandi",
       items: [
-        ["bed", 2.1, 1.35],
-        ["wardrobe", 0.3, 0.35],
-        ["rug", 2.2, 1.6],
-        ["lamp", 4.4, 1.5],
-        ["desk", 0.4, 3.7],
-        ["chair", 1.8, 3.7],
-        ["plant", 4.9, 3.9],
+        ["bed", 1.75, 0.25],
+        ["wardrobe", 0.15, 0.25],
+        ["rug", 1.85, 1.6],
+        ["lamp", 1.3, 1],
+        ["plant", 3.3, 2.8],
       ],
     },
     living: {
       name: "ห้องนั่งเล่น",
-      w: 6,
-      h: 5,
+      w: 4.5,
+      h: 4,
       style: "warm",
       items: [
-        ["sofa", 2, 1.0],
-        ["tv", 2.25, 0.25],
-        ["rug", 2.2, 2.2],
-        ["chair", 0.6, 3.2],
-        ["plant", 5.0, 0.5],
-        ["lamp", 4.7, 3.6],
-        ["desk", 0.3, 3.9],
+        ["sofa", 1.25, 0.45],
+        ["tv", 1.5, 3.5],
+        ["rug", 1.45, 0.75],
+        ["chair", 0.5, 2.45],
+        ["plant", 3.85, 0.35],
+        ["lamp", 3.75, 3.25],
+        ["desk", 0.2, 3.15],
       ],
     },
     office: {
       name: "ห้องทำงาน",
-      w: 5,
-      h: 4,
+      w: 3.5,
+      h: 3,
       style: "minimal",
       items: [
-        ["desk", 1.1, 1.0],
-        ["chair", 1.4, 1.8],
-        ["wardrobe", 3.55, 0.3],
-        ["rug", 1.3, 2.3],
-        ["plant", 4.1, 3.2],
-        ["lamp", 2.6, 0.9],
+        ["desk", 0.8, 0.3],
+        ["chair", 1.1, 1],
+        ["wardrobe", 2.1, 0.3],
+        ["rug", 0.8, 0.65],
+        ["plant", 0.2, 2.2],
+        ["lamp", 2.9, 1.2],
       ],
     },
   };
@@ -886,17 +794,83 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
       b.addEventListener("click", () => applyRoomTemplate(b.dataset.template)),
     );
   function changeRoom() {
+    const nextRoom = {
+      ...room,
+      w: Math.max(3, Math.min(12, Number($("roomW").value) || room.w)),
+      h: Math.max(3, Math.min(12, Number($("roomH").value) || room.h)),
+    };
+    const previousRoom = room,
+      previousItems = items,
+      selectedId = selected?.id;
+    room = nextRoom;
+    items = [];
+    let adjusted = false;
+    for (const original of previousItems) {
+      const i = { ...original },
+        originalX = i.x,
+        originalY = i.y,
+        originalW = i.w,
+        originalH = i.h;
+      const c = Math.abs(Math.cos(i.rot || 0)),
+        s = Math.abs(Math.sin(i.rot || 0));
+      while (true) {
+        const scale = Math.min(
+          1,
+          room.w / i.w,
+          room.h / i.h,
+          room.w / (i.w * c + i.h * s),
+          room.h / (i.w * s + i.h * c),
+        );
+        if (scale >= 1) break;
+        i.w = Math.max(0.2, i.w * scale);
+        i.h = Math.max(0.2, i.h * scale);
+        adjusted = true;
+      }
+      const halfW = (i.w * c + i.h * s) / 2,
+        halfH = (i.w * s + i.h * c) / 2,
+        minX = Math.max(0, halfW - i.w / 2),
+        maxX = Math.min(room.w - i.w, room.w - halfW - i.w / 2),
+        minY = Math.max(0, halfH - i.h / 2),
+        maxY = Math.min(room.h - i.h, room.h - halfH - i.h / 2);
+      i.x = Math.max(minX, Math.min(maxX, i.x));
+      i.y = Math.max(minY, Math.min(maxY, i.y));
+      let pos = canPlace(i) ? { x: i.x, y: i.y } : findFreePosition(i);
+      while (!pos && (i.w > 0.2 || i.h > 0.2)) {
+        i.w = Math.max(0.2, i.w * 0.9);
+        i.h = Math.max(0.2, i.h * 0.9);
+        pos = findFreePosition(i);
+      }
+      if (!pos) {
+        room = previousRoom;
+        items = previousItems;
+        $("roomW").value = room.w;
+        $("roomH").value = room.h;
+        status("ห้องเล็กเกินไปสำหรับเฟอร์นิเจอร์ทั้งหมด");
+        return;
+      }
+      i.x = pos.x;
+      i.y = pos.y;
+      if (
+        i.x !== originalX ||
+        i.y !== originalY ||
+        i.w !== originalW ||
+        i.h !== originalH
+      )
+        adjusted = true;
+      items.push(i);
+    }
+    const nextItems = items;
+    room = previousRoom;
+    items = previousItems;
     snapshot();
-    room.w = Math.max(3, Math.min(12, Number($("roomW").value) || 6));
-    room.h = Math.max(3, Math.min(12, Number($("roomH").value) || 5));
+    room = nextRoom;
+    items = nextItems;
+    selected = items.find((i) => i.id === selectedId) || null;
     $("roomW").value = room.w;
     $("roomH").value = room.h;
-    items.forEach((i) => {
-      i.x = Math.max(0, Math.min(room.w - i.w, i.x));
-      i.y = Math.max(0, Math.min(room.h - i.h, i.y));
-    });
     resizeCanvas();
     updateEditor();
+    if (adjusted) status("จัดตำแหน่งและปรับขนาดเฟอร์นิเจอร์ให้พอดีกับห้องแล้ว");
   }
   $("roomW").addEventListener("change", changeRoom);
   $("roomH").addEventListener("change", changeRoom);
@@ -937,7 +911,11 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     candidate.x = Math.min(candidate.x, Math.max(0, room.w - candidate.w));
     candidate.y = Math.min(candidate.y, Math.max(0, room.h - candidate.h));
     if (!canPlace(candidate, selected.id)) {
-      status("ปรับขนาดไม่ได้ เพราะเฟอร์นิเจอร์จะชนกัน");
+      status(
+        insideRoom(candidate)
+          ? "ปรับขนาดไม่ได้ เพราะเฟอร์นิเจอร์จะชนกัน"
+          : "ปรับขนาดไม่ได้ เพราะเฟอร์นิเจอร์จะเกินขอบห้อง",
+      );
       updateEditor();
       return;
     }
@@ -962,7 +940,11 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
       ),
     };
     if (!canPlace(candidate, selected.id)) {
-      status("ตำแหน่งนี้มีเฟอร์นิเจอร์อยู่แล้ว");
+      status(
+        insideRoom(candidate)
+          ? "ตำแหน่งนี้มีเฟอร์นิเจอร์อยู่แล้ว"
+          : "ตำแหน่งนี้เกินขอบห้อง",
+      );
       updateEditor();
       return;
     }
@@ -980,7 +962,11 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     if (!selected) return;
     const candidate = { ...selected, rot: (selected.rot || 0) + a };
     if (!canPlace(candidate, selected.id)) {
-      status("หมุนไม่ได้ เพราะเฟอร์นิเจอร์จะชนกัน");
+      status(
+        insideRoom(candidate)
+          ? "หมุนไม่ได้ เพราะเฟอร์นิเจอร์จะชนกัน"
+          : "หมุนไม่ได้ เพราะเฟอร์นิเจอร์จะเกินขอบห้อง",
+      );
       return;
     }
     snapshot();
@@ -1068,16 +1054,16 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     items = [];
     selected = null;
     room = {
-      w: 6,
-      h: 5,
+      w: 3.5,
+      h: 3.5,
       floor: palettes.modern.floor,
       wall: palettes.modern.wall,
       style: "modern",
       grid: true,
     };
     $("roomTitle").textContent = "ห้องของฉัน";
-    $("roomW").value = 6;
-    $("roomH").value = 5;
+    $("roomW").value = 3.5;
+    $("roomH").value = 3.5;
     $("floorColor").value = room.floor;
     $("wallColor").value = room.wall;
     $("showGrid").checked = true;
@@ -1118,9 +1104,14 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     $("view2dBtn").classList.remove("primary");
     $("bottomHint").textContent =
       "ลากเฟอร์นิเจอร์เพื่อย้าย · ปรับขนาดในแปลน 2D · ลากพื้นที่ว่างเพื่อหมุน · เลื่อนเพื่อซูม";
-    if (!renderer3d) init3D();
-    else resize3D();
-    render3D();
+    try {
+      if (!renderer3d) init3D();
+      else resize3D();
+      render3D();
+    } catch (e) {
+      $("view2dBtn").click();
+      status("อุปกรณ์นี้เปิดมุมมอง 3D ไม่ได้ จึงแสดงแปลน 2D แทน");
+    }
   });
   $("plan3d").addEventListener("pointerdown", (e) => {
     if (!renderer3d || e.button !== 0) return;
@@ -1194,69 +1185,9 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
   }
   $("plan3d").addEventListener("pointerup", endDrag3D);
   $("plan3d").addEventListener("pointercancel", endDrag3D);
-  // GLB/GLTF furniture loader. Files are read from assets/models/furniture/.
-  const furnitureModelFiles = {
-    bed: "bed.glb",
-    sofa: "sofa.glb",
-    desk: "desk.glb",
-    dining: "dining-table.glb",
-    wardrobe: "wardrobe.glb",
-    tv: "tv-stand.glb",
-    plant: "plant.glb",
-    rug: "rug.glb",
-    chair: "chair.glb",
-    lamp: "floor-lamp.glb",
-  };
-  const furnitureModelCache = new Map();
-  const furnitureModelPending = new Map();
-  const gltfLoader = new GLTFLoader();
-  function loadFurnitureModel(kind) {
-    const file = furnitureModelFiles[kind];
-    if (!file || !gltfLoader) return Promise.resolve(null);
-    if (furnitureModelCache.has(kind))
-      return Promise.resolve(furnitureModelCache.get(kind));
-    if (furnitureModelPending.has(kind)) return furnitureModelPending.get(kind);
-    const promise = new Promise((resolve) => {
-      gltfLoader.load(
-        "assets/models/furniture/" + file,
-        (gltf) => {
-          const model = gltf.scene;
-          model.traverse((n) => {
-            if (n.isMesh) {
-              n.castShadow = true;
-              n.receiveShadow = true;
-            }
-          });
-          furnitureModelCache.set(kind, model);
-          resolve(model);
-        },
-        undefined,
-        () => resolve(null),
-      );
-    }).finally(() => furnitureModelPending.delete(kind));
-    furnitureModelPending.set(kind, promise);
-    return promise;
-  }
-  function fitFurnitureModel(source, it) {
-    const model = source.clone(true);
-    const bounds = new THREE.Box3().setFromObject(model),
-      size = bounds.getSize(new THREE.Vector3());
-    if (size.x < 1e-5 || size.y < 1e-5 || size.z < 1e-5) return null;
-    model.position.set(0, 0, 0);
-    model.scale.set(
-      it.w / size.x,
-      Math.max(
-        0.15,
-        furnitureModelFiles[it.kind] && it.kind === "bed" ? 0.45 : 1.0,
-      ) / size.y,
-      it.h / size.z,
-    );
-    const scaledBounds = new THREE.Box3().setFromObject(model);
-    model.position.y -= scaledBounds.min.y;
-    return model;
-  }
   function render3D() {
     if (!scene3d) return;
+    if (framedRoom3D !== `${room.w}x${room.h}`) frameCamera3D();
     // While dragging in 3D, update existing object transforms only.
     // Rebuilding the entire scene on every pointermove causes visible flicker.
     if (dragging3d) {
@@ -1266,8 +1197,8 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
       });
       return;
     }
-    while (scene3d.children.length > 2) {
-      const o = scene3d.children[2];
+    while (scene3d.children.length > 3) {
+      const o = scene3d.children[3];
       scene3d.remove(o);
       o.traverse?.((n) => {
         if (n.geometry) n.geometry.dispose();
@@ -1302,9 +1233,21 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
           Math.max(0.04, h),
           Math.max(0.04, d),
         ),
-        new THREE.MeshBasicMaterial({ color: color || "#b5a18a" }),
+        mat(color || "#b5a18a", 0.9),
       );
       mesh.position.set(x, y, z);
+      mesh.receiveShadow = true;
+      parent.add(mesh);
+      return mesh;
+    }
+    function cylinder(parent, top, bottom, h, color, x, y, z) {
+      const mesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(top, bottom, h, 16),
+        mat(color),
+      );
+      mesh.position.set(x, y, z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
       parent.add(mesh);
       return mesh;
     }
@@ -1332,6 +1275,18 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
       wallH / 2,
       room.h / 2,
     );
+    box(scene3d, room.w - th, 0.16, 0.025, "#fffdf8", room.w / 2, 0.08, 0.07);
+    box(scene3d, 0.025, 0.16, room.h - th, "#fffdf8", 0.07, 0.08, room.h / 2);
+    box(
+      scene3d,
+      0.025,
+      0.16,
+      room.h - th,
+      "#fffdf8",
+      room.w - 0.07,
+      0.08,
+      room.h / 2,
+    );
     items.forEach((it) => {
       const group = new THREE.Group();
       group.position.set(it.x + it.w / 2, 0, it.y + it.h / 2);
@@ -1339,135 +1294,120 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
       group.userData.itemId = it.id;
       scene3d.add(group);
       objectMeshes.push({ mesh: group, it });
-      const fallback = () => {
-        while (group.children.length) {
-          const child = group.children.pop();
-          child.parent = null;
-        }
+      const buildFurniture = () => {
         const w = it.w,
           d = it.h,
           c = it.color;
         if (it.kind === "bed") {
-          box(group, w, 0.42, d, c, 0, 0.21, 0);
-          box(group, w * 0.92, 0.13, d * 0.25, "#f7f2e9", 0, 0.49, -d * 0.32);
+          box(group, w * 0.96, 0.22, d * 0.96, "#89694e", 0, 0.2, 0);
+          box(group, w * 0.94, 0.2, d * 0.9, "#f7f2e9", 0, 0.41, 0);
+          box(group, w * 0.94, 0.09, d * 0.56, c, 0, 0.54, d * 0.15);
+          box(group, w * 0.98, 0.72, 0.1, "#89694e", 0, 0.56, -d * 0.46);
+          for (const x of [-0.25, 0.25])
+            box(group, w * 0.4, 0.1, d * 0.14, "#fffdf8", x * w, 0.57, -d * 0.31);
+          for (const x of [-0.42, 0.42])
+            for (const z of [-0.42, 0.42])
+              box(group, 0.07, 0.16, 0.07, "#76583f", x * w, 0.08, z * d);
         } else if (it.kind === "sofa") {
-          box(group, w, 0.25, d, c, 0, 0.22, 0);
-          box(group, w, 0.48, 0.16, c, 0, 0.56, -d * 0.4);
-          box(group, 0.14, 0.4, d, c, -w * 0.43, 0.42, 0);
-          box(group, 0.14, 0.4, d, c, w * 0.43, 0.42, 0);
-          box(group, w * 0.38, 0.12, d * 0.52, "#c7cfc8", -w * 0.2, 0.42, 0);
-          box(group, w * 0.38, 0.12, d * 0.52, "#c7cfc8", w * 0.2, 0.42, 0);
+          box(group, w * 0.9, 0.28, d * 0.86, "#765f50", 0, 0.2, 0);
+          box(group, w * 0.82, 0.22, d * 0.66, c, 0, 0.42, d * 0.08);
+          box(group, w * 0.9, 0.52, 0.14, c, 0, 0.62, -d * 0.39);
+          box(group, 0.16, 0.43, d * 0.9, c, -w * 0.42, 0.43, 0);
+          box(group, 0.16, 0.43, d * 0.9, c, w * 0.42, 0.43, 0);
+          for (const x of [-0.21, 0.21]) {
+            box(group, w * 0.38, 0.12, d * 0.5, "#d6ded7", x * w, 0.57, 0.04);
+            box(group, w * 0.38, 0.32, 0.1, "#d6ded7", x * w, 0.72, -d * 0.31);
+          }
+          for (const x of [-0.4, 0.4])
+            for (const z of [-0.32, 0.32])
+              box(group, 0.05, 0.12, 0.05, "#5c493b", x * w, 0.06, z * d);
         } else if (it.kind === "plant") {
-          const pot = new THREE.Mesh(
-            new THREE.CylinderGeometry(d * 0.27, d * 0.2, 0.34, 16),
-            mat("#b87852"),
-          );
-          pot.position.y = 0.17;
-          group.add(pot);
-          const leaves = new THREE.Mesh(
-            new THREE.SphereGeometry(
-              Math.max(0.18, Math.min(w, d) * 0.38),
-              16,
-              12,
-            ),
-            mat(c || "#548260"),
-          );
-          leaves.position.y = 0.58;
-          group.add(leaves);
+          cylinder(group, d * 0.22, d * 0.16, 0.3, "#b87852", 0, 0.15, 0);
+          cylinder(group, d * 0.22, d * 0.22, 0.035, "#5f4737", 0, 0.31, 0);
+          for (const [x, y, z, s] of [
+            [0, 0.55, 0, 0.22],
+            [-0.13, 0.48, 0.03, 0.17],
+            [0.13, 0.5, -0.03, 0.18],
+            [0, 0.69, 0.03, 0.16],
+            [-0.04, 0.57, -0.12, 0.15],
+          ]) {
+            const leaf = new THREE.Mesh(
+              new THREE.SphereGeometry(s, 12, 10),
+              mat(c || "#548260"),
+            );
+            leaf.position.set(x, y, z);
+            leaf.scale.set(0.8, 1.3, 0.8);
+            leaf.castShadow = true;
+            group.add(leaf);
+          }
         } else if (it.kind === "chair") {
-          box(group, w, 0.12, d, c, 0, 0.42, 0);
-          box(group, w * 0.8, 0.38, 0.1, c, 0, 0.64, -d * 0.42);
-          for (const x of [-0.36, 0.36])
-            for (const z of [-0.34, 0.34])
-              box(group, 0.045, 0.38, 0.045, "#6c5848", x * w, 0.19, z * d);
+          box(group, w * 0.9, 0.1, d * 0.9, c, 0, 0.44, 0);
+          box(group, w * 0.9, 0.42, 0.09, c, 0, 0.68, -d * 0.4);
+          for (const x of [-0.38, 0.38])
+            for (const z of [-0.35, 0.35])
+              box(group, 0.045, 0.42, 0.045, "#6c5848", x * w, 0.21, z * d);
         } else if (it.kind === "lamp") {
-          const pole = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.025, 0.035, 0.65, 12),
-            mat("#77736b"),
+          cylinder(group, 0.14, 0.17, 0.045, "#77736b", 0, 0.02, 0);
+          cylinder(group, 0.025, 0.035, 1.2, "#77736b", 0, 0.64, 0);
+          cylinder(group, 0.09, 0.22, 0.28, c || "#d9bd6b", 0, 1.36, 0);
+          cylinder(group, 0.06, 0.06, 0.04, "#fff1bd", 0, 1.2, 0);
+        } else if (it.kind === "window") {
+          const frame = "#f4f2ec";
+          box(group, w, 0.07, 0.08, frame, 0, 2.02, 0);
+          box(group, w, 0.07, 0.08, frame, 0, 0.98, 0);
+          box(group, 0.07, 1.08, 0.08, frame, -w / 2 + 0.035, 1.5, 0);
+          box(group, 0.07, 1.08, 0.08, frame, w / 2 - 0.035, 1.5, 0);
+          const pane = new THREE.Mesh(
+            new THREE.BoxGeometry(w * 0.88, 0.9, 0.025),
+            new THREE.MeshStandardMaterial({
+              color: "#9dd7e3",
+              roughness: 0.2,
+              metalness: 0.1,
+              transparent: true,
+              opacity: 0.65,
+            }),
           );
-          pole.position.y = 0.34;
-          group.add(pole);
-          const shade = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.08, 0.22, 0.2, 16),
-            mat(c || "#d9bd6b"),
+          pane.position.set(0, 1.5, 0);
+          group.add(pane);
+          box(group, 0.035, 0.9, 0.035, frame, 0, 1.5, -0.025);
+        } else if (it.kind === "door") {
+          box(group, w, 2.05, 0.07, c, 0, 1.025, 0);
+          box(group, w * 0.72, 1.72, 0.025, "#a87b58", 0, 1.1, -0.048);
+          const knob = new THREE.Mesh(
+            new THREE.SphereGeometry(0.035, 12, 10),
+            mat("#d8b46a", 0.35),
           );
-          shade.position.y = 0.78;
-          group.add(shade);
+          knob.position.set(w * 0.34, 1, -0.06);
+          group.add(knob);
         } else if (it.kind === "rug") {
-          flatBox(group, w, 0.035, d, c, 0, 0.02, 0);
+          flatBox(group, w, 0.025, d, c, 0, 0.015, 0);
+          flatBox(group, w * 0.88, 0.008, 0.018, "#f2e9dc", 0, 0.033, -d * 0.4);
+          flatBox(group, w * 0.88, 0.008, 0.018, "#f2e9dc", 0, 0.033, d * 0.4);
         } else if (it.kind === "desk" || it.kind === "dining") {
-          box(group, w, 0.09, d, c, 0, 0.72, 0);
+          box(group, w, 0.08, d, c, 0, 0.74, 0);
+          box(group, w * 0.82, 0.12, 0.06, "#815f43", 0, 0.63, -d * 0.38);
           for (const x of [-0.42, 0.42])
             for (const z of [-0.38, 0.38])
-              box(group, 0.07, 0.7, 0.07, "#7b6047", x * w, 0.35, z * d);
+              box(group, 0.06, 0.7, 0.06, "#7b6047", x * w, 0.35, z * d);
+          if (it.kind === "desk")
+            box(group, w * 0.34, 0.09, d * 0.3, "#a87953", 0, 0.61, -d * 0.3);
         } else if (it.kind === "tv") {
-          box(group, w, 0.48, d, c, 0, 0.25, 0);
-          box(group, w * 0.78, 0.45, 0.035, "#202522", 0, 0.82, -d / 2 - 0.025);
+          box(group, w, 0.42, d, c, 0, 0.23, 0);
+          box(group, w * 0.78, 0.46, 0.045, "#171a19", 0, 0.78, -d / 2 - 0.025);
+          box(group, w * 0.73, 0.4, 0.008, "#70858a", 0, 0.79, -d / 2 - 0.051);
+          box(group, w * 0.22, 0.025, d * 0.65, "#4c4036", -w * 0.3, 0.46, 0);
+          box(group, w * 0.22, 0.025, d * 0.65, "#4c4036", w * 0.3, 0.46, 0);
         } else if (it.kind === "wardrobe") {
           box(group, w, 2, d, c, 0, 1, 0);
-          box(group, 0.025, 1.8, 0.025, "#e7d7c5", 0, 1, -d / 2 - 0.012);
+          box(group, 0.018, 1.86, 0.018, "#76583f", 0, 1, -d / 2 - 0.012);
+          for (const x of [-0.08, 0.08])
+            box(group, 0.025, 0.06, 0.025, "#d9bd8c", x, 1, -d / 2 - 0.03);
         } else {
           box(group, w, 0.75, d, c, 0, 0.375, 0);
         }
       };
-      loadFurnitureModel(it.kind)
-        .then((source) => {
-          if (!scene3d || !group.parent) return;
-          if (source) {
-            const model = source.clone(true);
-            model.traverse((n) => {
-              if (n.isMesh) {
-                if (n.geometry) n.geometry = n.geometry.clone();
-                if (n.material)
-                  n.material = Array.isArray(n.material)
-                    ? n.material.map((m) => m.clone())
-                    : n.material.clone();
-              }
-            });
-            const bounds = new THREE.Box3().setFromObject(model),
-              size = bounds.getSize(new THREE.Vector3());
-            if (size.x > 0.0001 && size.y > 0.0001 && size.z > 0.0001) {
-              const targetHeight =
-                it.kind === "bed"
-                  ? 0.48
-                  : it.kind === "rug"
-                    ? 0.06
-                    : it.kind === "plant"
-                      ? 0.85
-                      : it.kind === "lamp"
-                        ? 0.9
-                        : it.kind === "wardrobe"
-                          ? 2
-                          : it.kind === "tv"
-                            ? 0.8
-                            : it.kind === "chair"
-                              ? 0.9
-                              : it.kind === "sofa"
-                                ? 0.9
-                                : it.kind === "desk" || it.kind === "dining"
-                                  ? 0.78
-                                  : 0.75;
-              model.scale.set(
-                it.w / size.x,
-                targetHeight / size.y,
-                it.h / size.z,
-              );
-              const fitted = new THREE.Box3().setFromObject(model);
-              model.position.y -= fitted.min.y;
-              model.traverse((n) => {
-                if (n.isMesh) {
-                  n.castShadow = true;
-                  n.receiveShadow = true;
-                }
-              });
-              group.add(model);
-            } else fallback();
-          } else fallback();
-        })
-        .catch(fallback);
+      buildFurniture();
     });
-    controls3d.target.set(room.w / 2, 0, room.h / 2);
-    controls3d.update();
   }
   window.addEventListener("resize", () => {
     resizeCanvas();
@@ -1479,6 +1419,7 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
       selected &&
       document.activeElement.tagName !== "INPUT"
     ) {
+      snapshot();
       items = items.filter((i) => i.id !== selected.id);
       selected = null;
       draw();
@@ -1492,4 +1433,5 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
   });
   resizeCanvas();
   updateEditor();
+  $("view3dBtn").click();
 })();
