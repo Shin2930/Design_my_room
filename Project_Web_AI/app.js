@@ -13,8 +13,8 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     warm: { floor: "#cda984", wall: "#f5e8d6", furniture: "#9b6c4e" },
   };
   const specs = {
-    livingpack: { name: "ชุดเฟอร์นิเจอร์ห้องนั่งเล่น", w: 2.8, h: 2, color: "#82958a", kind: "livingpack" },
     bed: { name: "เตียงนอน", w: 1.8, h: 2, color: "#d9c8b8", kind: "bed" },
+    livingpack: { name: "ชุดเฟอร์นิเจอร์ห้องนั่งเล่น", w: 2.8, h: 2, color: "#82958a", kind: "livingpack" },
     sofa: { name: "โซฟา", w: 2, h: 0.9, color: "#82958a", kind: "sofa" },
     desk: { name: "โต๊ะทำงาน", w: 1.2, h: 0.6, color: "#bd9870", kind: "desk" },
     dining: {
@@ -136,11 +136,6 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     shadowCamera.updateProjectionMatrix();
     litRoom3D = dimensions;
   }
-  function rotation3D(it) {
-    const defaultRotation =
-      it.kind === "bed" ? -Math.PI / 2 : it.kind === "sofa" ? Math.PI / 2 : 0;
-    return -(it.rot || 0) + defaultRotation;
-  }
   const cameraKeys3D = new Set();
   let cameraMoveTime3D = 0;
   function moveCamera3D(delta) {
@@ -170,6 +165,7 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
   }
   let dragging3d = null;
   const gltfLoader = new GLTFLoader();
+  // วางไฟล์ .glb ไว้ในโฟลเดอร์ assets/models แล้วตั้งชื่อให้ตรงกับรายการนี้
   let exteriorTexture3D = null;
   function getExteriorTexture3D() {
     if (exteriorTexture3D) return exteriorTexture3D;
@@ -289,14 +285,14 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     let rot = 0;
     if (wall === "left" || wall === "right") {
       rot = wall === "left" ? -Math.PI / 2 : Math.PI / 2;
-      cx = wall === "left" ? it.h / 2 : room.w - it.h / 2;
-      cy = Math.max(it.w / 2, Math.min(room.h - it.w / 2, cy));
-    } else {
-      rot = wall === "top" ? 0 : Math.PI;
-      cy = wall === "top" ? it.h / 2 : room.h - it.h / 2;
-      cx = Math.max(it.w / 2, Math.min(room.w - it.w / 2, cx));
+      const x = wall === "left" ? it.h / 2 : room.w - it.h / 2,
+        y = Math.max(it.w / 2, Math.min(room.h - it.w / 2, cy));
+      return { ...it, x: x - it.w / 2, y: y - it.h / 2, rot };
     }
-    return { ...it, x: cx - it.w / 2, y: cy - it.h / 2, rot };
+    rot = wall === "top" ? 0 : Math.PI;
+    const x = Math.max(it.w / 2, Math.min(room.w - it.w / 2, cx)),
+      y = wall === "top" ? it.h / 2 : room.h - it.h / 2;
+    return { ...it, x: x - it.w / 2, y: y - it.h / 2, rot };
   }
   function windowWall(it) {
     if (it.kind !== "window") return null;
@@ -629,7 +625,7 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     ctx.strokeRect(x, y, w, h);
     items.filter((i) => i.kind === "window").forEach((it) => {
       const side = windowWall(it),
-        span = it.w * u,
+        span = it.w * 0.9 * 0.95 * u,
         cx = x + (it.x + it.w / 2) * u,
         cy = y + (it.y + it.h / 2) * u;
       if (!side) return;
@@ -814,11 +810,12 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
       draw();
       return;
     }
-    let candidate = snapDoorToWall(clampToRoom({
+    let candidate = clampToRoom({
       ...it,
       x: dragging.origX + (p.x - dragging.startX) / view.unit,
       y: dragging.origY + (p.y - dragging.startY) / view.unit,
-    }));
+    });
+    candidate = snapDoorToWall(candidate);
     // Snap unrotated furniture flush to the nearest wall in 2D.
     const wallSnap = 0.35;
     if (candidate.kind !== "door" && candidate.kind !== "window" && Math.abs(candidate.rot || 0) < 0.001) {
@@ -1351,11 +1348,12 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
       draw();
       return;
     }
-    let candidate = snapDoorToWall(clampToRoom({
+    let candidate = clampToRoom({
       ...it,
       x: point.x - it.w / 2,
       y: point.z - it.h / 2,
-    }));
+    });
+    candidate = snapDoorToWall(candidate);
     // Snap furniture to a wall when it is dragged close to the room edge.
     const snap = 0.35;
     if (candidate.kind !== "door" && candidate.kind !== "window" && Math.abs(candidate.rot || 0) < 0.001) {
@@ -1391,7 +1389,7 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     if (dragging3d) {
       objectMeshes.forEach(({ mesh, it }) => {
         mesh.position.set(it.x + it.w / 2, Number(it.lift) || 0, it.y + it.h / 2);
-        mesh.rotation.y = rotation3D(it);
+        mesh.rotation.y = -(it.rot || 0);
       });
       return;
     }
@@ -1518,7 +1516,7 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     items.forEach((it) => {
       const group = new THREE.Group();
       group.position.set(it.x + it.w / 2, Number(it.lift) || 0, it.y + it.h / 2);
-      group.rotation.y = rotation3D(it);
+      group.rotation.y = -(it.rot || 0);
       group.userData.itemId = it.id;
       scene3d.add(group);
       objectMeshes.push({ mesh: group, it });
@@ -1526,37 +1524,34 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
         const modelUrl = glbModels[it.kind];
         if (modelUrl) {
           loadGLB(modelUrl).then((sourceModel) => {
+            // ฉากอาจถูกวาดใหม่ระหว่างโหลด ให้เพิ่มโมเดลเฉพาะกลุ่มที่ยังอยู่ในฉาก
             if (group.parent !== scene3d || group.userData.glbLoaded) return;
             const model = sourceModel.clone(true);
-            if (it.kind === "window") model.rotation.y -= Math.PI / 2;
-            const bounds = new THREE.Box3().setFromObject(model),
-              size = new THREE.Vector3();
-            bounds.getSize(size);
-            model.scale.multiplyScalar(
-              Math.max(it.w, it.h) / Math.max(size.x, size.z, 0.001),
-            );
-            let scaledBounds = new THREE.Box3().setFromObject(model);
+            if (it.kind === "bed") model.rotation.y -= Math.PI / 2;
+            else if (it.kind === "sofa") model.rotation.y += Math.PI / 2;
+            else if (it.kind === "window") model.rotation.y -= Math.PI / 2;
+            const box3 = new THREE.Box3().setFromObject(model);
+            const size = new THREE.Vector3();
+            box3.getSize(size);
+            const maxXZ = Math.max(size.x, size.z, 0.001);
+            const targetXZ = Math.max(it.w, it.h);
+            const scale = targetXZ / maxXZ;
+            model.scale.multiplyScalar(scale);
+            let scaledBox = new THREE.Box3().setFromObject(model);
             if (it.kind === "window") {
               const scaledSize = new THREE.Vector3();
-              scaledBounds.getSize(scaledSize);
+              scaledBox.getSize(scaledSize);
               model.scale.y *= 1.12 / scaledSize.y;
-              scaledBounds = new THREE.Box3().setFromObject(model);
+              scaledBox = new THREE.Box3().setFromObject(model);
             }
-            model.position.x -= (scaledBounds.min.x + scaledBounds.max.x) / 2;
-            model.position.y += (it.kind === "window" ? 0.94 : 0) - scaledBounds.min.y;
-            model.position.z -= (scaledBounds.min.z + scaledBounds.max.z) / 2;
+            model.position.x -= (scaledBox.min.x + scaledBox.max.x) / 2;
+            model.position.y += (it.kind === "window" ? 0.94 : 0) - scaledBox.min.y;
+            model.position.z -= (scaledBox.min.z + scaledBox.max.z) / 2;
             model.traverse((node) => {
               if (node.isMesh) {
                 node.castShadow = true;
                 node.receiveShadow = true;
               }
-            });
-            group.traverse((node) => {
-              if (!node.isMesh) return;
-              node.geometry.dispose();
-              if (Array.isArray(node.material))
-                node.material.forEach((material) => material.dispose());
-              else node.material.dispose();
             });
             group.clear();
             group.add(model);
@@ -1564,7 +1559,7 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
               addWindowExterior(group, it.w);
             group.userData.glbLoaded = true;
           }).catch((error) => {
-            console.warn(`Could not load furniture model: ${modelUrl}`, error);
+            console.warn(`โหลดโมเดล ${modelUrl} ไม่สำเร็จ ใช้โมเดลสำรองแทน`, error);
           });
         }
         const w = it.w,
