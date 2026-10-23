@@ -1,1 +1,1 @@
-Project_Web_AI/assets/models/bed.glb filter=lfs diff=lfs merge=lfs -text
+assets/models/bed.glb filter=lfs diff=lfs merge=lfs -text

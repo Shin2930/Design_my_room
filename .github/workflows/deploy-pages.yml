@@ -4,7 +4,10 @@ on:
   push:
     branches: [main]
     paths:
-      - "Project_Web_AI/**"
+      - "app.js"
+      - "index.html"
+      - "style.css"
+      - "assets/**"
       - ".github/workflows/deploy-pages.yml"
   workflow_dispatch:
 
@@ -32,7 +35,11 @@ jobs:
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: Project_Web_AI
+          path: |
+            index.html
+            style.css
+            app.js
+            assets
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
