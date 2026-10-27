@@ -1599,9 +1599,11 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
             // ฉากอาจถูกวาดใหม่ระหว่างโหลด ให้เพิ่มโมเดลเฉพาะกลุ่มที่ยังอยู่ในฉาก
             if (group.parent !== scene3d || group.userData.glbLoaded) return;
             const model = sourceModel.clone(true);
-            // ใช้มุมเริ่มต้นกับตัว GLB โดยตรง ส่วน group เก็บเฉพาะมุมหมุนที่ผู้ใช้ตั้งใน 2D
-            if (it.kind === "bed") model.rotation.y = -Math.PI / 2;
-            else if (it.kind === "sofa") model.rotation.y += Math.PI / 2;
+            // ครอบ GLB ด้วย pivot แยก เพื่อให้มุมเตียงหมุนทั้งลำดับชั้นของ mesh จริง
+            const modelRoot = it.kind === "bed" ? new THREE.Group() : model;
+            if (it.kind === "bed") {
+              modelRoot.rotation.y = Math.PI;
+            } else if (it.kind === "sofa") model.rotation.y += Math.PI / 2;
             else if (it.kind === "window") model.rotation.y -= Math.PI / 2;
             const box3 = new THREE.Box3().setFromObject(model);
             const size = new THREE.Vector3();
@@ -1609,7 +1611,15 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
             const maxXZ = Math.max(size.x, size.z, 0.001);
             const targetXZ = Math.max(it.w, it.h);
             const scale = targetXZ / maxXZ;
-            model.scale.multiplyScalar(scale);
+            if (it.kind === "bed") {
+              model.scale.set(
+                (it.w / Math.max(size.x, 0.001)) * model.scale.x,
+                scale * model.scale.y,
+                (it.h / Math.max(size.z, 0.001)) * 1.1 * model.scale.z,
+              );
+            } else {
+              model.scale.multiplyScalar(scale);
+            }
             let scaledBox = new THREE.Box3().setFromObject(model);
             if (it.kind === "window") {
               const scaledSize = new THREE.Vector3();
@@ -1626,15 +1636,15 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
                 node.receiveShadow = true;
               }
             });
+            if (it.kind === "bed") modelRoot.add(model);
             group.clear();
-            group.add(model);
+            group.add(modelRoot);
             if (it.kind === "bed") {
-              // คำนวณขอบเขตหลังใส่โมเดลเข้ากลุ่ม เพื่อให้ฐานเตียงแตะระดับพื้นจริง
+              // จัดฐานจากขอบเขตของ GLB หลังหมุนทั้งโมเดลแล้ว
               group.updateMatrixWorld(true);
-              const bedBounds = new THREE.Box3().setFromObject(model);
-              // จัดฐานให้ชนพื้นหลังหักตำแหน่งและมุมของโมเดลแล้ว
-              model.position.y += group.position.y - bedBounds.min.y - 0.2;
-              model.updateMatrixWorld(true);
+              const bedBounds = new THREE.Box3().setFromObject(modelRoot);
+              modelRoot.position.y += group.position.y - bedBounds.min.y - 0.65;
+              modelRoot.updateMatrixWorld(true);
             }
             if (it.kind === "window" && windowWall(it))
               addWindowExterior(group, it.w);
