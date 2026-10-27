@@ -215,6 +215,20 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
   function updateModelLoadUI(state) {
     const list = $("modelLoadList");
     if (!list) return;
+    if (state.status === "ready") {
+      state.row?.remove();
+      state.row = null;
+      if (!list.querySelector(".model-load-item")) {
+        let empty = list.querySelector(".model-load-empty");
+        if (!empty) {
+          empty = document.createElement("p");
+          empty.className = "model-load-empty";
+          list.append(empty);
+        }
+        empty.textContent = "ไม่มีโมเดลที่กำลังโหลด";
+      }
+      return;
+    }
     if (!state.row) {
       list.querySelector(".model-load-empty")?.remove();
       state.row = document.createElement("div");
@@ -239,9 +253,6 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     } else if (state.status === "loading") {
       state.progress.removeAttribute("value");
       state.detail.textContent = "กำลังโหลด";
-    } else if (state.status === "ready") {
-      state.progress.value = 100;
-      state.detail.textContent = "พร้อมใช้งาน";
     } else {
       state.progress.value = 100;
       state.detail.textContent = "โหลดไม่สำเร็จ";
@@ -254,7 +265,7 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
       modelLoadStates.set(url, state);
     }
     if (kind) state.kinds.add(kind);
-    updateModelLoadUI(state);
+    if (state.status !== "ready") updateModelLoadUI(state);
     if (!glbCache.has(url)) {
       glbCache.set(url, new Promise((resolve, reject) => {
         gltfLoader.load(url, (gltf) => {
@@ -1450,7 +1461,7 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     if (dragging3d) {
       objectMeshes.forEach(({ mesh, it }) => {
         mesh.position.set(it.x + it.w / 2, Number(it.lift) || 0, it.y + it.h / 2);
-        mesh.rotation.y = -(it.rot || 0);
+        mesh.rotation.y = -(it.rot || 0) - (it.kind === "bed" ? Math.PI / 2 : 0);
       });
       return;
     }
@@ -1577,7 +1588,7 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     items.forEach((it) => {
       const group = new THREE.Group();
       group.position.set(it.x + it.w / 2, Number(it.lift) || 0, it.y + it.h / 2);
-      group.rotation.y = -(it.rot || 0);
+      group.rotation.y = -(it.rot || 0) - (it.kind === "bed" ? Math.PI / 2 : 0);
       group.userData.itemId = it.id;
       scene3d.add(group);
       objectMeshes.push({ mesh: group, it });
@@ -1588,8 +1599,8 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
             // ฉากอาจถูกวาดใหม่ระหว่างโหลด ให้เพิ่มโมเดลเฉพาะกลุ่มที่ยังอยู่ในฉาก
             if (group.parent !== scene3d || group.userData.glbLoaded) return;
             const model = sourceModel.clone(true);
-            if (it.kind === "bed") model.rotation.y -= Math.PI / 2;
-            else if (it.kind === "sofa") model.rotation.y += Math.PI / 2;
+            // หมุนเตียงที่กลุ่ม 3D เพื่อแยกจากมุม rot ในแปลน 2D
+            if (it.kind === "sofa") model.rotation.y += Math.PI / 2;
             else if (it.kind === "window") model.rotation.y -= Math.PI / 2;
             const box3 = new THREE.Box3().setFromObject(model);
             const size = new THREE.Vector3();
@@ -1616,6 +1627,14 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
             });
             group.clear();
             group.add(model);
+            if (it.kind === "bed") {
+              // คำนวณขอบเขตหลังใส่โมเดลเข้ากลุ่ม เพื่อให้ฐานเตียงแตะระดับพื้นจริง
+              group.updateMatrixWorld(true);
+              const bedBounds = new THREE.Box3().setFromObject(model);
+              // จัดฐานให้ชนพื้นหลังหักตำแหน่งและมุมของโมเดลแล้ว
+              model.position.y += group.position.y - bedBounds.min.y - 0.2;
+              model.updateMatrixWorld(true);
+            }
             if (it.kind === "window" && windowWall(it))
               addWindowExterior(group, it.w);
             group.userData.glbLoaded = true;
