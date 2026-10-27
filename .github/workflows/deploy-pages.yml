@@ -33,6 +33,10 @@ jobs:
         with:
           lfs: true
       - uses: actions/configure-pages@v5
+      - name: Fetch bed model from Git LFS
+        run: |
+          git lfs pull --include="assets/models/bed.glb"
+          test "$(head -c 4 assets/models/bed.glb)" = "glTF"
       - name: Prepare Pages files
         run: |
           mkdir -p _site
