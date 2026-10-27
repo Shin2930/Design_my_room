@@ -205,10 +205,71 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     door: "assets/models/modern_door.glb",
   };
   const glbCache = new Map();
-  function loadGLB(url) {
+  const modelLoadStates = new Map();
+  const modelLabels = {
+    bed: "เตียง", sofa: "โซฟา", desk: "โต๊ะทำงาน", dining: "โต๊ะอาหาร",
+    wardrobe: "ตู้เสื้อผ้า", tv: "โทรทัศน์", livingpack: "ชุดห้องนั่งเล่น",
+    plant: "ต้นไม้", rug: "พรม", chair: "เก้าอี้", lamp: "โคมไฟ",
+    window: "หน้าต่าง", door: "ประตู",
+  };
+  function updateModelLoadUI(state) {
+    const list = $("modelLoadList");
+    if (!list) return;
+    if (!state.row) {
+      list.querySelector(".model-load-empty")?.remove();
+      state.row = document.createElement("div");
+      state.row.className = "model-load-item";
+      state.name = document.createElement("div");
+      state.name.className = "model-load-name";
+      state.progress = document.createElement("progress");
+      state.progress.max = 100;
+      state.progress.className = "model-load-progress";
+      state.detail = document.createElement("div");
+      state.detail.className = "model-load-detail";
+      state.row.append(state.name, state.progress, state.detail);
+      list.append(state.row);
+    }
+    const labels = [...state.kinds].map((kind) => modelLabels[kind] || kind);
+    state.name.textContent = labels.join(" / ");
+    state.row.dataset.status = state.status;
+    if (state.status === "loading" && state.total > 0) {
+      const percent = Math.min(100, Math.round((state.loaded / state.total) * 100));
+      state.progress.value = percent;
+      state.detail.textContent = `กำลังโหลด ${percent}%`;
+    } else if (state.status === "loading") {
+      state.progress.removeAttribute("value");
+      state.detail.textContent = "กำลังโหลด";
+    } else if (state.status === "ready") {
+      state.progress.value = 100;
+      state.detail.textContent = "พร้อมใช้งาน";
+    } else {
+      state.progress.value = 100;
+      state.detail.textContent = "โหลดไม่สำเร็จ";
+    }
+  }
+  function loadGLB(url, kind) {
+    let state = modelLoadStates.get(url);
+    if (!state) {
+      state = { kinds: new Set(), status: "loading", loaded: 0, total: 0 };
+      modelLoadStates.set(url, state);
+    }
+    if (kind) state.kinds.add(kind);
+    updateModelLoadUI(state);
     if (!glbCache.has(url)) {
       glbCache.set(url, new Promise((resolve, reject) => {
-        gltfLoader.load(url, (gltf) => resolve(gltf.scene), undefined, reject);
+        gltfLoader.load(url, (gltf) => {
+          state.status = "ready";
+          updateModelLoadUI(state);
+          resolve(gltf.scene);
+        }, (event) => {
+          state.loaded = event.loaded || 0;
+          state.total = event.total || 0;
+          updateModelLoadUI(state);
+        }, (error) => {
+          state.status = "error";
+          updateModelLoadUI(state);
+          reject(error);
+        });
       }));
     }
     return glbCache.get(url);
@@ -1523,7 +1584,7 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
       const buildFurniture = () => {
         const modelUrl = glbModels[it.kind];
         if (modelUrl) {
-          loadGLB(modelUrl).then((sourceModel) => {
+          loadGLB(modelUrl, it.kind).then((sourceModel) => {
             // ฉากอาจถูกวาดใหม่ระหว่างโหลด ให้เพิ่มโมเดลเฉพาะกลุ่มที่ยังอยู่ในฉาก
             if (group.parent !== scene3d || group.userData.glbLoaded) return;
             const model = sourceModel.clone(true);

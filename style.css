@@ -169,6 +169,40 @@ button {
   margin: 21px 0 10px;
   text-transform: uppercase;
 }
+.model-loading {
+  margin: 0 0 18px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfb;
+}
+.model-loading .section-label {
+  margin: 0 0 10px;
+}
+.model-load-item + .model-load-item {
+  margin-top: 10px;
+}
+.model-load-name {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-weight: 600;
+}
+.model-load-progress {
+  display: block;
+  width: 100%;
+  height: 8px;
+  margin: 6px 0 3px;
+  accent-color: var(--blue);
+}
+.model-load-detail,
+.model-load-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.model-load-item[data-status="error"] .model-load-detail {
+  color: #b93838;
+}
 .style-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
