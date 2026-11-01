@@ -1,6 +1,8 @@
 import * as THREE from "three";
+import { importedModels } from "./assets/models/catalog.js?v=20261101-crt-tv-rear";
 import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js";
+import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/utils/SkeletonUtils.js";
 
 (() => {
   const canvas = document.getElementById("plan"),
@@ -46,8 +48,8 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     door: { name: "ประตู", w: 0.9, h: 0.12, color: "#8b6246", kind: "door" },
   };
   let room = {
-    w: 3.5,
-    h: 3.5,
+    w: 8,
+    h: 8,
     floor: "#8b5e3c",
     wall: "#f4f2ec",
     style: "modern",
@@ -165,7 +167,7 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
   }
   let dragging3d = null;
   const gltfLoader = new GLTFLoader();
-  // วางไฟล์ .glb ไว้ในโฟลเดอร์ assets/models แล้วตั้งชื่อให้ตรงกับรายการนี้
+  // วางไฟล์ .glb ไว้ในโฟลเดอร์ assets/models/<ประเภท> แล้วตั้ง path ให้ตรงกับรายการนี้
   let exteriorTexture3D = null;
   function getExteriorTexture3D() {
     if (exteriorTexture3D) return exteriorTexture3D;
@@ -190,28 +192,211 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     parent.add(exterior);
   }
   const glbModels = {
-    bed: "assets/models/bed.glb",
-    sofa: "assets/models/sofa.glb",
-    desk: "assets/models/modern_table.glb",
-    dining: "assets/models/modern_table.glb",
-    wardrobe: "assets/models/wardrobe.glb",
-    tv: "assets/models/tv.glb",
-    livingpack: "assets/models/tinylivingpack.glb",
-    plant: "assets/models/plant_pot.glb",
-    rug: "assets/models/carpet.glb",
-    chair: "assets/models/modern_chair.glb",
-    lamp: "assets/models/lamp.glb",
-    window: "assets/models/window.glb",
-    door: "assets/models/modern_door.glb",
+    bed: "assets/models/beds/bed.glb",
+    sofa: "assets/models/sofas/sofa.glb",
+    desk: "assets/models/tables/modern_table.glb",
+    dining: "assets/models/tables/modern_table.glb",
+    wardrobe: "assets/models/wardrobes/wardrobe.glb",
+    tv: "assets/models/tvs/tv.glb",
+    livingpack: "assets/models/sets/tinylivingpack.glb",
+    plant: "assets/models/plants/plant_pot.glb",
+    rug: "assets/models/rugs/carpet.glb",
+    chair: "assets/models/chairs/modern_chair.glb",
+    lamp: "assets/models/lamps/lamp.glb",
+    window: "assets/models/windows/window.glb",
+    door: "assets/models/doors/modern_door.glb",
+  };
+  const normalizeModelUrl = (url) => {
+    const value = String(url || "");
+    try {
+      return decodeURIComponent(value).replace(/\\/g, "/").toLowerCase();
+    } catch {
+      return value.replace(/\\/g, "/").toLowerCase();
+    }
+  };
+  const importedModelOptions = new Map(
+    importedModels.map((model) => [normalizeModelUrl(model.model), model]),
+  );
+  const malfoyModelUrl = importedModels.find((model) => model.id === "malfoy_character")?.model;
+  const standardBedHeight = 0.95;
+  const bedFloorInset = 0.04;
+  const standardTvHeight = 0.85;
+  const standardChairHeight = 1.0;
+  const standardLampHeight = 1.5;
+  let bedContactShadowTexture3D = null;
+  const getImportedModelOptions = (url) => {
+    const normalizedUrl = normalizeModelUrl(url);
+    return importedModelOptions.get(normalizedUrl)
+      || importedModels.find((model) => {
+        const catalogUrl = normalizeModelUrl(model.model);
+        return normalizedUrl.endsWith(catalogUrl) || catalogUrl.endsWith(normalizedUrl);
+      });
   };
   const glbCache = new Map();
-  function loadGLB(url) {
+  const modelLoadStates = new Map();
+  const modelLabels = {
+    bed: "เตียง", sofa: "โซฟา", desk: "โต๊ะทำงาน", dining: "โต๊ะอาหาร",
+    wardrobe: "ตู้เสื้อผ้า", tv: "โทรทัศน์", livingpack: "ชุดห้องนั่งเล่น",
+    plant: "ต้นไม้", rug: "พรม", chair: "เก้าอี้", lamp: "โคมไฟ",
+    window: "หน้าต่าง", door: "ประตู", table: "โต๊ะ", character: "ตัวละคร",
+  };
+  function updateModelLoadUI(state) {
+    const list = $("modelLoadList");
+    if (!list) return;
+    if (state.status === "ready") {
+      state.row?.remove();
+      state.row = null;
+      if (!list.querySelector(".model-load-item")) {
+        let empty = list.querySelector(".model-load-empty");
+        if (!empty) {
+          empty = document.createElement("p");
+          empty.className = "model-load-empty";
+          list.append(empty);
+        }
+        empty.textContent = "ไม่มีโมเดลที่กำลังโหลด";
+      }
+      return;
+    }
+    if (!state.row) {
+      list.querySelector(".model-load-empty")?.remove();
+      state.row = document.createElement("div");
+      state.row.className = "model-load-item";
+      state.name = document.createElement("div");
+      state.name.className = "model-load-name";
+      state.progress = document.createElement("progress");
+      state.progress.max = 100;
+      state.progress.className = "model-load-progress";
+      state.detail = document.createElement("div");
+      state.detail.className = "model-load-detail";
+      state.row.append(state.name, state.progress, state.detail);
+      list.append(state.row);
+    }
+    const labels = [...state.kinds].map((kind) => modelLabels[kind] || kind);
+    state.name.textContent = labels.join(" / ");
+    state.row.dataset.status = state.status;
+    if (state.status === "loading" && state.total > 0) {
+      const percent = Math.min(100, Math.round((state.loaded / state.total) * 100));
+      state.progress.value = percent;
+      state.detail.textContent = `กำลังโหลด ${percent}%`;
+    } else if (state.status === "loading") {
+      state.progress.removeAttribute("value");
+      state.detail.textContent = "กำลังโหลด";
+    } else {
+      state.progress.value = 100;
+      state.detail.textContent = "โหลดไม่สำเร็จ";
+    }
+  }
+  function loadGLB(url, kind) {
+    let state = modelLoadStates.get(url);
+    if (!state) {
+      state = { kinds: new Set(), status: "loading", loaded: 0, total: 0 };
+      modelLoadStates.set(url, state);
+    }
+    if (kind) state.kinds.add(kind);
+    if (state.status !== "ready") updateModelLoadUI(state);
     if (!glbCache.has(url)) {
       glbCache.set(url, new Promise((resolve, reject) => {
-        gltfLoader.load(url, (gltf) => resolve(gltf.scene), undefined, reject);
+        gltfLoader.load(url, (gltf) => {
+          state.status = "ready";
+          updateModelLoadUI(state);
+          resolve(gltf.scene);
+        }, (event) => {
+          state.loaded = event.loaded || 0;
+          state.total = event.total || 0;
+          updateModelLoadUI(state);
+        }, (error) => {
+          state.status = "error";
+          updateModelLoadUI(state);
+          reject(error);
+        });
       }));
     }
     return glbCache.get(url);
+  }
+  function normalizeTvWomanHead(model) {
+    const pants = model.getObjectByName("Object_120");
+    const headParts = ["Object_122", "Object_123"]
+      .map((name) => model.getObjectByName(name))
+      .filter((node) => node?.isSkinnedMesh);
+    if (!pants?.isSkinnedMesh || headParts.length !== 2) return;
+
+    model.updateMatrixWorld(true);
+    pants.skeleton.update();
+    headParts.forEach((node) => node.skeleton.update());
+
+    const bodyBounds = new THREE.Box3().setFromObject(pants);
+    const headBounds = new THREE.Box3().makeEmpty();
+    headParts.forEach((node) => headBounds.union(new THREE.Box3().setFromObject(node)));
+    const bodySize = bodyBounds.getSize(new THREE.Vector3());
+    const headSize = headBounds.getSize(new THREE.Vector3());
+    if (bodyBounds.isEmpty() || headBounds.isEmpty() || bodySize.x < 0.001) return;
+
+    const headScale = Math.min(
+      1,
+      (Math.max(bodySize.x, bodySize.z) * 0.82) / Math.max(headSize.x, headSize.z, 0.001),
+    );
+    const headCenter = headBounds.getCenter(new THREE.Vector3());
+    const bodyCenter = bodyBounds.getCenter(new THREE.Vector3());
+    const targetHeadCenter = new THREE.Vector3(
+      bodyCenter.x,
+      bodyBounds.max.y + headSize.y * headScale * 0.52,
+      bodyCenter.z,
+    );
+    const headPivot = new THREE.Group();
+    headPivot.name = "tvWomanHeadPivot";
+    headPivot.position.copy(targetHeadCenter);
+    headPivot.rotation.y = Math.PI;
+    model.add(headPivot);
+
+    headParts.forEach((node) => {
+      const geometry = node.geometry.clone();
+      const sourcePositions = node.geometry.attributes.position;
+      const targetPositions = geometry.attributes.position;
+      const point = new THREE.Vector3();
+      for (let index = 0; index < sourcePositions.count; index += 1) {
+        point.fromBufferAttribute(sourcePositions, index);
+        node.applyBoneTransform(index, point);
+        point.applyMatrix4(node.matrixWorld);
+        point.sub(headCenter).multiplyScalar(headScale);
+        targetPositions.setXYZ(index, point.x, point.y, point.z);
+      }
+      geometry.deleteAttribute("skinIndex");
+      geometry.deleteAttribute("skinWeight");
+      geometry.computeVertexNormals();
+      geometry.computeBoundingBox();
+      geometry.computeBoundingSphere();
+
+      const normalizedHeadPart = new THREE.Mesh(geometry, node.material);
+      normalizedHeadPart.name = node.name;
+      normalizedHeadPart.castShadow = true;
+      normalizedHeadPart.receiveShadow = true;
+      normalizedHeadPart.frustumCulled = false;
+      headPivot.add(normalizedHeadPart);
+      node.visible = false;
+    });
+    model.updateMatrixWorld(true);
+  }
+  function bendMalfoyUpperArms(model) {
+    const bendAngle = THREE.MathUtils.degToRad(-65);
+    const normalizeBoneName = (name) => name.replace(/[^a-z0-9]/gi, "").toLowerCase();
+    const armBoneNames = new Set(
+      ["Right_arm_0240", "Left_arm_082"].map(normalizeBoneName),
+    );
+    const armBones = new Map();
+    model.traverse((node) => {
+      if (!node.isSkinnedMesh || !node.skeleton) return;
+      node.skeleton.bones.forEach((bone) => {
+        const normalizedName = normalizeBoneName(bone.name);
+        if (armBoneNames.has(normalizedName)) armBones.set(normalizedName, bone);
+      });
+    });
+    armBones.forEach((bone) => {
+      bone.rotation.x = bendAngle;
+    });
+    model.updateMatrixWorld(true);
+    model.traverse((node) => {
+      if (node.isSkinnedMesh) node.skeleton.update();
+    });
   }
   function pointerToFloor(e) {
     const r = $("plan3d").getBoundingClientRect();
@@ -690,7 +875,6 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     $("objectName").value = selected.name;
     $("objectW").value = selected.w;
     $("objectH").value = selected.h;
-    $("objectColor").value = selected.color;
     $("objectX").value = selected.x.toFixed(1);
     $("objectY").value = selected.y.toFixed(1);
     $("objectLift").value = (Number(selected.lift) || 0).toFixed(1);
@@ -837,34 +1021,130 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     if (dragging?.moved) status("อัปเดตตำแหน่งแล้ว");
     dragging = null;
   });
+  importedModels.forEach((model) => {
+    specs[model.id] = {
+      name: model.name,
+      w: model.w,
+      h: model.h,
+      color: model.color,
+      kind: model.kind,
+      modelUrl: model.model,
+      axis: model.axis,
+      rotationY: model.rotationY,
+      visibleMeshes: model.visibleMeshes,
+    };
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "furn";
+    button.dataset.type = model.id;
+    button.dataset.category = model.category;
+    const icon = document.createElement("span");
+    icon.className = "emoji";
+    icon.textContent = model.icon;
+    const name = document.createElement("b");
+    name.textContent = model.name;
+    const dimensions = document.createElement("small");
+    dimensions.textContent = `${model.w} × ${model.h} ม. · โมเดล GLB`;
+    button.append(icon, name, dimensions);
+    $("catalog").append(button);
+  });
   document
     .querySelectorAll(".furn")
     .forEach((b) => b.addEventListener("click", () => addItem(b.dataset.type)));
-  let catalogCategory = "all";
+  const catalogKindLabels = {
+    all: "\u0e17\u0e31\u0e49\u0e07\u0e2b\u0e21\u0e14",
+    bed: "เตียง",
+    sofa: "โซฟา",
+    livingpack: "ชุดห้องนั่งเล่น",
+    desk: "โต๊ะทำงาน",
+    dining: "โต๊ะอาหาร",
+    table: "โต๊ะ",
+    wardrobe: "ตู้เสื้อผ้า",
+    tv: "ชั้นวางทีวี",
+    plant: "ต้นไม้",
+    rug: "พรม",
+    chair: "เก้าอี้",
+    lamp: "โคมไฟ",
+    window: "หน้าต่าง",
+    door: "ประตู",
+    character: "ตัวละคร",
+  };
+  const catalogKindIcons = {
+    bed: "🛏️",
+    sofa: "🛋️",
+    livingpack: "🛋️",
+    desk: "🖥️",
+    dining: "🍽️",
+    table: "🪵",
+    wardrobe: "🚪",
+    tv: "📺",
+    plant: "🪴",
+    rug: "▧",
+    chair: "🪑",
+    lamp: "💡",
+    window: "▤",
+    door: "🚪",
+    character: "🧙",
+  };
+  const catalogButtons = [...document.querySelectorAll(".furn")];
+  catalogButtons.forEach((button) => {
+    button.dataset.kind = specs[button.dataset.type]?.kind || button.dataset.type;
+  });
+  let catalogType = catalogButtons[0]?.dataset.kind || "";
+  function updateCatalogTypeNav() {
+    const typeCounts = new Map();
+    catalogButtons.forEach((button) => {
+      const kind = button.dataset.kind;
+      typeCounts.set(kind, (typeCounts.get(kind) || 0) + 1);
+    });
+    if (!typeCounts.has(catalogType)) {
+      catalogType = typeCounts.keys().next().value || "";
+    }
+
+    const navButtons = [];
+    const addTypeButton = (kind, label, icon, count) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `catalog-type-button${catalogType === kind ? " active" : ""}`;
+      button.dataset.kind = kind;
+      button.dataset.label = label;
+      button.title = `${label} (${count})`;
+      button.setAttribute("aria-label", `${label}, ${count} items`);
+      button.setAttribute("aria-pressed", String(catalogType === kind));
+      const iconNode = document.createElement("span");
+      iconNode.className = "catalog-nav-icon";
+      iconNode.textContent = icon;
+      button.append(iconNode);
+      navButtons.push(button);
+    };
+
+    typeCounts.forEach((count, kind) => {
+      addTypeButton(kind, catalogKindLabels[kind] || kind, catalogKindIcons[kind] || "\ud83d\udce6", count);
+    });
+    $("catalogTypeNav").replaceChildren(...navButtons);
+  }
   function filterCatalog() {
     const query = $("catalogSearch").value.trim().toLocaleLowerCase();
     let visible = 0;
-    document.querySelectorAll(".furn").forEach((button) => {
+    catalogButtons.forEach((button) => {
       const matches =
-        (catalogCategory === "all" || button.dataset.category === catalogCategory) &&
+        button.dataset.kind === catalogType &&
         button.textContent.toLocaleLowerCase().includes(query);
       button.hidden = !matches;
       if (matches) visible++;
     });
     $("catalogEmpty").hidden = visible > 0;
   }
+  updateCatalogTypeNav();
+  filterCatalog();
   $("catalogSearch").addEventListener("input", filterCatalog);
-  document.querySelectorAll(".catalog-filter").forEach((button) =>
-    button.addEventListener("click", () => {
-      catalogCategory = button.dataset.category;
-      document.querySelectorAll(".catalog-filter").forEach((filter) => {
-        const active = filter === button;
-        filter.classList.toggle("active", active);
-        filter.setAttribute("aria-pressed", active);
-      });
-      filterCatalog();
-    }),
-  );
+  $("catalogTypeNav").addEventListener("click", (event) => {
+    const button = event.target.closest(".catalog-type-button");
+    if (!button) return;
+    catalogType = button.dataset.kind;
+    updateCatalogTypeNav();
+    filterCatalog();
+  });
   document.querySelectorAll(".style-btn").forEach((b) =>
     b.addEventListener("click", () => {
       snapshot();
@@ -1066,12 +1346,6 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
       draw();
     }
   });
-  $("objectColor").addEventListener("input", () => {
-    if (selected) {
-      selected.color = $("objectColor").value;
-      draw();
-    }
-  });
   $("objectLift").addEventListener("change", () => {
     if (!selected || selected.kind !== "tv") return;
     snapshot();
@@ -1231,16 +1505,16 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     items = [];
     selected = null;
     room = {
-      w: 3.5,
-      h: 3.5,
+      w: 8,
+      h: 8,
       floor: palettes.modern.floor,
       wall: palettes.modern.wall,
       style: "modern",
       grid: true,
     };
     $("roomTitle").textContent = "ห้องของฉัน";
-    $("roomW").value = 3.5;
-    $("roomH").value = 3.5;
+    $("roomW").value = 8;
+    $("roomH").value = 8;
     $("floorColor").value = room.floor;
     $("wallColor").value = room.wall;
     $("showGrid").checked = true;
@@ -1380,6 +1654,37 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
   }
   $("plan3d").addEventListener("pointerup", endDrag3D);
   $("plan3d").addEventListener("pointercancel", endDrag3D);
+  const getItemLift3D = (it) => it.kind === "bed" ? -bedFloorInset : Number(it.lift) || 0;
+  function addBedContactShadow(parent, item) {
+    if (!bedContactShadowTexture3D) {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 128;
+      const context = canvas.getContext("2d");
+      const gradient = context.createRadialGradient(64, 64, 8, 64, 64, 64);
+      gradient.addColorStop(0, "rgba(38, 25, 16, 0.24)");
+      gradient.addColorStop(0.55, "rgba(38, 25, 16, 0.14)");
+      gradient.addColorStop(1, "rgba(38, 25, 16, 0)");
+      context.fillStyle = gradient;
+      context.fillRect(0, 0, 128, 128);
+      bedContactShadowTexture3D = new THREE.CanvasTexture(canvas);
+      bedContactShadowTexture3D.colorSpace = THREE.SRGBColorSpace;
+    }
+    const shadow = new THREE.Mesh(
+      new THREE.PlaneGeometry(item.w * 1.08, item.h * 1.08),
+      new THREE.MeshBasicMaterial({
+        map: bedContactShadowTexture3D,
+        transparent: true,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        toneMapped: false,
+      }),
+    );
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.position.y = bedFloorInset + 0.003;
+    shadow.renderOrder = 1;
+    shadow.userData.isBedContactShadow = true;
+    parent.add(shadow);
+  }
   function render3D() {
     if (!scene3d) return;
     if (framedRoom3D !== `${room.w}x${room.h}`) frameCamera3D();
@@ -1388,7 +1693,7 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     // Rebuilding the entire scene on every pointermove causes visible flicker.
     if (dragging3d) {
       objectMeshes.forEach(({ mesh, it }) => {
-        mesh.position.set(it.x + it.w / 2, Number(it.lift) || 0, it.y + it.h / 2);
+        mesh.position.set(it.x + it.w / 2, getItemLift3D(it), it.y + it.h / 2);
         mesh.rotation.y = -(it.rot || 0);
       });
       return;
@@ -1515,46 +1820,144 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/
     );
     items.forEach((it) => {
       const group = new THREE.Group();
-      group.position.set(it.x + it.w / 2, Number(it.lift) || 0, it.y + it.h / 2);
+      group.position.set(it.x + it.w / 2, getItemLift3D(it), it.y + it.h / 2);
       group.rotation.y = -(it.rot || 0);
       group.userData.itemId = it.id;
       scene3d.add(group);
       objectMeshes.push({ mesh: group, it });
       const buildFurniture = () => {
-        const modelUrl = glbModels[it.kind];
+        let modelUrl = it.modelUrl || glbModels[it.kind];
+        if (modelUrl && normalizeModelUrl(modelUrl).includes("malfoy_draconia")) {
+          modelUrl = malfoyModelUrl || modelUrl;
+        }
         if (modelUrl) {
-          loadGLB(modelUrl).then((sourceModel) => {
+          const modelOptions = getImportedModelOptions(modelUrl) || {};
+          const bedRotationY = modelOptions.bedRotationY ?? Math.PI;
+          const sofaRotationY = modelOptions.sofaRotationY ?? Math.PI / 2;
+          const tvRotationY = modelOptions.tvRotationY ?? 0;
+          const chairRotationY = modelOptions.chairRotationY ?? Math.PI / 2;
+          const tableRotationY = modelOptions.tableRotationY ?? Math.PI * 1.5;
+          const tableTurnY = modelOptions.id && modelOptions.id !== "table" ? Math.PI / 2 : 0;
+          // GLTFLoader already applies the GLB scene's up-axis conversion; keep
+          // characters upright unless a specific model defines an extra tilt.
+          const characterRotationX = it.rotationX ?? modelOptions.rotationX ?? 0;
+          const characterRotationY = modelOptions.rotationY ?? it.rotationY ?? 0;
+          const visibleCharacterMeshes = modelOptions.id
+            ? modelOptions.visibleMeshes
+            : it.visibleMeshes;
+          loadGLB(modelUrl, it.kind).then((sourceModel) => {
             // ฉากอาจถูกวาดใหม่ระหว่างโหลด ให้เพิ่มโมเดลเฉพาะกลุ่มที่ยังอยู่ในฉาก
             if (group.parent !== scene3d || group.userData.glbLoaded) return;
-            const model = sourceModel.clone(true);
-            if (it.kind === "bed") model.rotation.y -= Math.PI / 2;
-            else if (it.kind === "sofa") model.rotation.y += Math.PI / 2;
+            const model = SkeletonUtils.clone(sourceModel);
+            if (modelOptions.id === "tv_woman_character") normalizeTvWomanHead(model);
+            if (
+              modelOptions.id === "malfoy_character"
+              || normalizeModelUrl(modelUrl).includes("malfoy_draconia")
+            ) bendMalfoyUpperArms(model);
+            let sourceBounds = new THREE.Box3().makeEmpty();
+            if (it.kind === "character") {
+              model.updateMatrixWorld(true);
+              model.traverse((node) => {
+                if (!node.isMesh || !node.visible) return;
+                if (node.isSkinnedMesh) node.skeleton.update();
+                const meshBounds = new THREE.Box3().setFromObject(node);
+                if (visibleCharacterMeshes?.length && !visibleCharacterMeshes.includes(node.name)) {
+                  node.visible = false;
+                  return;
+                }
+                sourceBounds.union(meshBounds);
+              });
+              if (sourceBounds.isEmpty()) sourceBounds.setFromObject(model);
+            } else {
+              sourceBounds.setFromObject(model);
+            }
+            // ครอบ GLB ด้วย pivot แยก เพื่อให้มุมเตียงหมุนทั้งลำดับชั้นของ mesh จริง
+            const modelRoot = it.kind === "bed" || it.kind === "character" ? new THREE.Group() : model;
+            if (it.kind === "bed") {
+              modelRoot.rotation.y = bedRotationY;
+            } else if (it.kind === "sofa") model.rotation.y += sofaRotationY;
+            else if (it.kind === "tv") model.rotation.y += tvRotationY;
+            else if (it.kind === "chair") model.rotation.y += chairRotationY + Math.PI;
+            else if (it.kind === "table") model.rotation.y += tableRotationY + tableTurnY;
             else if (it.kind === "window") model.rotation.y -= Math.PI / 2;
-            const box3 = new THREE.Box3().setFromObject(model);
+            else if (it.kind === "character") {
+              modelRoot.rotation.set(
+                characterRotationX,
+                characterRotationY,
+                0,
+              );
+              modelRoot.add(model);
+            }
+            const transformRoot = it.kind === "character" ? modelRoot : model;
+            const box3 = it.kind === "character"
+              ? sourceBounds.clone().applyMatrix4(
+                  new THREE.Matrix4().makeRotationFromEuler(modelRoot.rotation),
+                )
+              : sourceBounds;
             const size = new THREE.Vector3();
             box3.getSize(size);
             const maxXZ = Math.max(size.x, size.z, 0.001);
             const targetXZ = Math.max(it.w, it.h);
-            const scale = targetXZ / maxXZ;
-            model.scale.multiplyScalar(scale);
-            let scaledBox = new THREE.Box3().setFromObject(model);
+            const footprintScale = targetXZ / maxXZ;
+            const scale = it.kind === "character"
+              ? 1.65 / Math.max(size.y, 0.001)
+              : footprintScale;
+            if (it.kind === "bed") {
+              const swapsFootprintAxes = Math.abs(Math.sin(bedRotationY)) > Math.SQRT1_2;
+              model.scale.set(
+                ((swapsFootprintAxes ? it.h : it.w) / Math.max(size.x, 0.001)) * model.scale.x,
+                (standardBedHeight / Math.max(size.y, 0.001)) * model.scale.y,
+                ((swapsFootprintAxes ? it.w : it.h) / Math.max(size.z, 0.001)) * model.scale.z,
+              );
+              model.scale.multiplyScalar(modelOptions.modelScale ?? 1);
+            } else if (it.kind === "tv") {
+              model.scale.multiplyScalar(standardTvHeight / Math.max(size.y, 0.001));
+            } else if (it.kind === "lamp") {
+              model.scale.multiplyScalar(standardLampHeight / Math.max(size.y, 0.001));
+            } else if (it.kind === "chair") {
+              model.scale.multiplyScalar(
+                (standardChairHeight / Math.max(size.y, 0.001))
+                * (modelOptions.chairScale ?? 1),
+              );
+            } else {
+              if (it.kind === "character") modelRoot.scale.multiplyScalar(scale);
+              else model.scale.multiplyScalar(scale);
+            }
+            let scaledBox;
+            if (it.kind === "character") {
+              scaledBox = box3.clone();
+              scaledBox.min.multiplyScalar(scale);
+              scaledBox.max.multiplyScalar(scale);
+            } else {
+              scaledBox = new THREE.Box3().setFromObject(model);
+            }
             if (it.kind === "window") {
               const scaledSize = new THREE.Vector3();
               scaledBox.getSize(scaledSize);
               model.scale.y *= 1.12 / scaledSize.y;
               scaledBox = new THREE.Box3().setFromObject(model);
             }
-            model.position.x -= (scaledBox.min.x + scaledBox.max.x) / 2;
-            model.position.y += (it.kind === "window" ? 0.94 : 0) - scaledBox.min.y;
-            model.position.z -= (scaledBox.min.z + scaledBox.max.z) / 2;
+            const modelCenter = scaledBox.getCenter(new THREE.Vector3());
+            transformRoot.position.x -= modelCenter.x;
+            transformRoot.position.y += (it.kind === "window" ? 0.94 : 0) - scaledBox.min.y;
+            transformRoot.position.z -= modelCenter.z;
             model.traverse((node) => {
               if (node.isMesh) {
-                node.castShadow = true;
+                node.castShadow = it.kind !== "bed";
                 node.receiveShadow = true;
               }
             });
+            if (it.kind === "bed") modelRoot.add(model);
             group.clear();
-            group.add(model);
+            group.add(modelRoot);
+            if (it.kind === "bed") addBedContactShadow(group, it);
+            if (it.kind === "bed") {
+              // จัดฐานจากขอบเขตของ GLB หลังหมุนทั้งโมเดลแล้ว
+              group.updateMatrixWorld(true);
+              const bedBounds = new THREE.Box3().setFromObject(group);
+              group.position.y = -bedFloorInset - (bedBounds.min.y - group.position.y);
+              group.updateMatrixWorld(true);
+            }
             if (it.kind === "window" && windowWall(it))
               addWindowExterior(group, it.w);
             group.userData.glbLoaded = true;
