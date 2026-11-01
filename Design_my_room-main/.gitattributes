@@ -1,1 +1,0 @@
-assets/models/beds/bed.glb -filter -diff -merge -text
