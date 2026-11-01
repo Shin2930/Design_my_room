@@ -1,0 +1,49 @@
+name: Deploy Room Studio to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app.js"
+      - "index.html"
+      - "style.css"
+      - "assets/**"
+      - ".github/workflows/deploy-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      actions: read
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: actions/configure-pages@v5
+      - name: Verify bed model
+        run: |
+          test "$(head -c 4 assets/models/beds/bed.glb)" = "glTF"
+      - name: Prepare Pages files
+        run: |
+          mkdir -p _site
+          cp index.html style.css app.js _site/
+          cp -R assets _site/assets
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
