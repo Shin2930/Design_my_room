@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { importedModels } from "./assets/models/catalog.js?v=20261101-lion-height-12";
+import { importedModels } from "./assets/models/catalog.js?v=20261101-tabletop-support";
 import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js";
 import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/utils/SkeletonUtils.js";
@@ -33,7 +33,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       color: "#a87953",
       kind: "wardrobe",
     },
-    tv: { name: "ชั้นวางทีวี", w: 1.5, h: 0.4, color: "#8c8277", kind: "tv" },
+    tv: { name: "ชั้นวางทีวี", w: 1.2, h: 0.4, color: "#8c8277", kind: "tv", placeableOn: ["table"] },
     plant: { name: "ต้นไม้", w: 0.5, h: 0.5, color: "#548260", kind: "plant" },
     rug: { name: "พรม", w: 1.6, h: 1.2, color: "#c7b7a1", kind: "rug" },
     chair: { name: "เก้าอี้", w: 0.6, h: 0.6, color: "#a87953", kind: "chair" },
@@ -67,6 +67,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     raycaster3d = null,
     mouse3d = null,
     objectMeshes = [],
+    wallMeshes3D = [],
     framedRoom3D = null,
     directionalLight3D = null,
     litRoom3D = null;
@@ -440,6 +441,20 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     moveCamera3D(Math.min((now - cameraMoveTime3D) / 1000, 0.05));
     cameraMoveTime3D = now;
     controls3d.update();
+    wallMeshes3D.forEach(({ mesh, side }) => {
+      const outside =
+        (side === "top" && camera3d.position.z < 0) ||
+        (side === "left" && camera3d.position.x < 0) ||
+        (side === "right" && camera3d.position.x > room.w) ||
+        (side === "bottom" && camera3d.position.z > room.h);
+      const material = mesh.material;
+      if (material.transparent !== outside) {
+        material.transparent = outside;
+        material.depthWrite = !outside;
+        material.needsUpdate = true;
+      }
+      material.opacity = outside ? 0.24 : 1;
+    });
     renderer3d.render(scene3d, camera3d);
   }
   function snapshot() {
@@ -523,6 +538,63 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
         y <= room.h + 0.0001,
     );
   }
+  const getSurfaceType = (it) =>
+    it.surfaceType || (["desk", "dining", "table"].includes(it.kind) ? "table" : null);
+  const getSurfaceHeight = (it) =>
+    it.surfaceHeight == null
+      ? (getSurfaceType(it) === "table" ? 0.75 : 0)
+      : Number(it.surfaceHeight) || 0;
+  const getPlaceableOn = (it) => it.placeableOn || (it.kind === "tv" ? ["table"] : []);
+  function fitsOnSurface(it, surface) {
+    if (!getPlaceableOn(it).includes(getSurfaceType(surface))) return false;
+    const polygon = corners(surface);
+    return corners(it).every(([x, y]) => {
+      let inside = false;
+      for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const [xi, yi] = polygon[i], [xj, yj] = polygon[j];
+        const dx = xj - xi, dy = yj - yi,
+          cross = (x - xi) * dy - (y - yi) * dx,
+          dot = (x - xi) * dx + (y - yi) * dy;
+        if (Math.abs(cross) < 1e-6 && dot >= -1e-6 && dot <= dx * dx + dy * dy + 1e-6)
+          return true;
+        if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi)
+          inside = !inside;
+      }
+      return inside;
+    });
+  }
+  function moveWithSurface(it, from, to) {
+    const oldRotation = from.rot || 0,
+      newRotation = to.rot || 0,
+      delta = newRotation - oldRotation,
+      dx = it.x + it.w / 2 - (from.x + from.w / 2),
+      dy = it.y + it.h / 2 - (from.y + from.h / 2),
+      localX = dx * Math.cos(oldRotation) + dy * Math.sin(oldRotation),
+      localY = -dx * Math.sin(oldRotation) + dy * Math.cos(oldRotation),
+      worldX = localX * Math.cos(newRotation) - localY * Math.sin(newRotation),
+      worldY = localX * Math.sin(newRotation) + localY * Math.cos(newRotation),
+      centerX = to.x + to.w / 2,
+      centerY = to.y + to.h / 2;
+    return {
+      ...it,
+      x: centerX + worldX - it.w / 2,
+      y: centerY + worldY - it.h / 2,
+      rot: (it.rot || 0) + delta,
+    };
+  }
+  function moveSupportedItems(from, to) {
+    items.forEach((it) => {
+      if (it.supportId === from.id) Object.assign(it, moveWithSurface(it, from, to));
+    });
+  }
+  function placeOnSurface(it) {
+    const surface = [...items].reverse().find((other) =>
+      other.id !== it.id && fitsOnSurface(it, other),
+    );
+    if (surface) return { ...it, supportId: surface.id };
+    const { supportId, ...onFloor } = it;
+    return onFloor;
+  }
   function overlaps(a, b) {
     if (a.kind === "rug" || b.kind === "rug") return false;
     const A = corners(a),
@@ -544,9 +616,24 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
   }
   function canPlace(candidate, ignoreId = candidate.id) {
     if (!insideRoom(candidate)) return false;
-    return !items.some(
-      (other) => other.id !== ignoreId && overlaps(candidate, other),
-    );
+    const attached = items.filter((it) => it.supportId === candidate.id),
+      attachedIds = new Set(attached.map((it) => it.id)),
+      carried = attached.map((it) => moveWithSurface(it, items.find((item) => item.id === candidate.id), candidate));
+    if (
+      carried.some((it) => !insideRoom(it) || !fitsOnSurface(it, candidate)) ||
+      items.some((other) =>
+        other.id !== ignoreId && !attachedIds.has(other.id) && overlaps(candidate, other) &&
+        !(candidate.supportId === other.id && fitsOnSurface(candidate, other)),
+      )
+    ) return false;
+    for (let i = 0; i < carried.length; i++) {
+      if (items.some((other) =>
+        other.id !== ignoreId && !attachedIds.has(other.id) && overlaps(carried[i], other),
+      )) return false;
+      for (let j = i + 1; j < carried.length; j++)
+        if (overlaps(carried[i], carried[j])) return false;
+    }
+    return true;
   }
   function findFreePosition(it) {
     for (let y = 0; y <= room.h - it.h + 0.001; y += 0.25)
@@ -789,6 +876,11 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     ctx.restore();
   }
   function draw(updateScene3D = true) {
+    items.forEach((it) => {
+      const support = items.find((other) => other.id === it.supportId);
+      if (it.supportId && (!support || !fitsOnSurface(it, support)))
+        delete it.supportId;
+    });
     const cw = parseFloat(canvas.style.width) || canvas.width,
       ch = parseFloat(canvas.style.height) || canvas.height;
     ctx.clearRect(0, 0, cw, ch);
@@ -854,8 +946,11 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
         ctx.strokeRect(x + w - 7, cy - span / 2, 15, span);
       }
     });
-    items.filter((i) => i.kind === "rug").forEach(drawFurniture);
-    items.filter((i) => i.kind !== "rug").forEach(drawFurniture);
+    const drawOrder = [...items].sort(
+      (a, b) => Number(!!a.supportId) - Number(!!b.supportId),
+    );
+    drawOrder.filter((i) => i.kind === "rug").forEach(drawFurniture);
+    drawOrder.filter((i) => i.kind !== "rug").forEach(drawFurniture);
     if (room.grid) {
       ctx.fillStyle = "#68716a";
       ctx.font = "11px Kanit";
@@ -901,7 +996,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     $("objectX").value = selected.x.toFixed(1);
     $("objectY").value = selected.y.toFixed(1);
     $("objectLift").value = (Number(selected.lift) || 0).toFixed(1);
-    $("liftField").hidden = selected.kind !== "tv";
+    $("liftField").hidden = !getPlaceableOn(selected).length;
   }
   function getPointer(e) {
     const r = canvas.getBoundingClientRect();
@@ -954,7 +1049,10 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       canvas.setPointerCapture(e.pointerId);
       return;
     }
-    const found = [...items].reverse().find((it) => hitTest(p, it));
+    const found = [...items]
+      .sort((a, b) => Number(!!a.supportId) - Number(!!b.supportId))
+      .reverse()
+      .find((it) => hitTest(p, it));
     if (found) {
       selected = found;
       dragging = {
@@ -1002,13 +1100,10 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
           x: dragging.origX + (dragging.origW - w) / 2,
           y: dragging.origY + (dragging.origH - h) / 2,
         };
-      if (canPlace(candidate, it.id)) {
-        Object.assign(it, {
-          x: candidate.x,
-          y: candidate.y,
-          w: candidate.w,
-          h: candidate.h,
-        });
+      const placement = placeOnSurface(candidate);
+      if (canPlace(placement, it.id)) {
+        moveSupportedItems(it, placement);
+        Object.assign(it, placement);
         if (it.modelFitW != null) {
           it.modelFitW = it.w;
           it.modelFitH = it.h;
@@ -1027,10 +1122,10 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       y: dragging.origY + (p.y - dragging.startY) / view.unit,
     });
     candidate = snapDoorToWall(candidate);
+    candidate = placeOnSurface(candidate);
     if (canPlace(candidate, it.id)) {
-      it.x = candidate.x;
-      it.y = candidate.y;
-      it.rot = candidate.rot;
+      moveSupportedItems(it, candidate);
+      Object.assign(it, candidate);
     }
     $("objectX").value = it.x.toFixed(1);
     $("objectY").value = it.y.toFixed(1);
@@ -1047,6 +1142,9 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       h: model.h,
       color: model.color,
       kind: model.kind,
+      placeableOn: model.placeableOn,
+      surfaceType: model.surfaceType,
+      surfaceHeight: model.surfaceHeight,
       modelUrl: model.model,
       axis: model.axis,
       rotationY: model.rotationY,
@@ -1378,12 +1476,12 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     }
   });
   $("objectLift").addEventListener("change", () => {
-    if (!selected || selected.kind !== "tv") return;
+    if (!selected || !getPlaceableOn(selected).length) return;
     snapshot();
     selected.lift = Math.max(0, Math.min(2.4, Number($("objectLift").value) || 0));
     $("objectLift").value = selected.lift.toFixed(1);
     draw();
-    status("ปรับความสูงทีวีแล้ว");
+    status("ปรับความสูงอุปกรณ์แล้ว");
   });
   function updateDimension(which) {
     if (!selected) return;
@@ -1407,6 +1505,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       return;
     }
     snapshot();
+    moveSupportedItems(selected, candidate);
     Object.assign(selected, candidate);
     if (selected.modelFitW != null) {
       selected.modelFitW = selected.w;
@@ -1419,11 +1518,11 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
   $("objectH").addEventListener("change", () => updateDimension("h"));
   function updatePosition() {
     if (!selected) return;
-    const candidate = snapDoorToWall(clampToRoom({
+    const candidate = placeOnSurface(snapDoorToWall(clampToRoom({
       ...selected,
       x: Number($("objectX").value) || 0,
       y: Number($("objectY").value) || 0,
-    }));
+    })));
     if (!canPlace(candidate, selected.id)) {
       status(
         insideRoom(candidate)
@@ -1434,9 +1533,8 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       return;
     }
     snapshot();
-    selected.x = candidate.x;
-    selected.y = candidate.y;
-    selected.rot = candidate.rot;
+    moveSupportedItems(selected, candidate);
+    Object.assign(selected, candidate);
     draw();
     updateEditor();
   }
@@ -1446,7 +1544,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
   $("rotateRight").addEventListener("click", () => rotate(Math.PI / 12));
   function rotate(a) {
     if (!selected) return;
-    const candidate = { ...selected, rot: (selected.rot || 0) + a };
+    const candidate = placeOnSurface({ ...selected, rot: (selected.rot || 0) + a });
     if (!canPlace(candidate, selected.id)) {
       status(
         insideRoom(candidate)
@@ -1456,7 +1554,8 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       return;
     }
     snapshot();
-    selected.rot = candidate.rot;
+    moveSupportedItems(selected, candidate);
+    Object.assign(selected, candidate);
     draw();
   }
   $("deleteBtn").addEventListener("click", () => {
@@ -1651,7 +1750,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     }
     if (!dragging3d.moved) return;
     // Drag vertically with the mouse while keeping the object on its current floor position.
-    if (it.kind === "tv" && e.shiftKey) {
+    if (getPlaceableOn(it).length && e.shiftKey) {
       it.lift = Math.max(0, Math.min(2.4, dragging3d.startLift + (dragging3d.startY - e.clientY) * 0.012));
       $("objectLift").value = it.lift.toFixed(1);
       draw();
@@ -1662,11 +1761,10 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       x: point.x - it.w / 2,
       y: point.z - it.h / 2,
     });
-    candidate = snapDoorToWall(candidate);
+    candidate = placeOnSurface(snapDoorToWall(candidate));
     if (canPlace(candidate, it.id)) {
-      it.x = candidate.x;
-      it.y = candidate.y;
-      it.rot = candidate.rot;
+      moveSupportedItems(it, candidate);
+      Object.assign(it, candidate);
     }
     $("objectX").value = it.x.toFixed(1);
     $("objectY").value = it.y.toFixed(1);
@@ -1681,7 +1779,11 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
   }
   $("plan3d").addEventListener("pointerup", endDrag3D);
   $("plan3d").addEventListener("pointercancel", endDrag3D);
-  const getItemLift3D = (it) => it.kind === "bed" ? -getBedFloorInset(it) : Number(it.lift) || 0;
+  const getItemLift3D = (it) => {
+    if (it.kind === "bed") return -getBedFloorInset(it);
+    const surface = items.find((other) => other.id === it.supportId);
+    return (surface ? getSurfaceHeight(surface) : 0) + (Number(it.lift) || 0);
+  };
   function addBedContactShadow(parent, item) {
     if (!bedContactShadowTexture3D) {
       const canvas = document.createElement("canvas");
@@ -1737,6 +1839,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       });
     }
     objectMeshes = [];
+    wallMeshes3D = [];
     const mat = (color, roughness = 0.85) =>
       new THREE.MeshStandardMaterial({ color: color || "#b5a18a", roughness });
     function box(parent, w, h, d, color, x, y, z) {
@@ -1791,11 +1894,13 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     );
     const wallH = 2.6,
       th = 0.12;
-    const wallWindows = { top: [], left: [], right: [] };
+    const wallWindows = { top: [], left: [], right: [], bottom: [] };
     items.forEach((it) => {
       const side = windowWall(it);
-      if (!side || side === "bottom") return;
-      const center = side === "top" ? it.x + it.w / 2 : it.y + it.h / 2;
+      if (!side) return;
+      const center = side === "top" || side === "bottom"
+        ? it.x + it.w / 2
+        : it.y + it.h / 2;
       wallWindows[side].push([
         center - it.w * 0.45 * 0.95,
         center + it.w * 0.45 * 0.95,
@@ -1803,8 +1908,8 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     });
     function wallSection(side, start, end, low, high) {
       if (end - start < 0.04 || high - low < 0.04) return;
-      const horizontal = side === "top";
-      flatBox(
+      const horizontal = side === "top" || side === "bottom";
+      const mesh = flatBox(
         scene3d,
         horizontal ? end - start : th,
         high - low,
@@ -1812,27 +1917,32 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
         room.wall,
         horizontal ? (start + end) / 2 : side === "left" ? 0 : room.w,
         (low + high) / 2,
-        horizontal ? 0 : (start + end) / 2,
+        side === "top" ? 0 : side === "bottom" ? room.h : (start + end) / 2,
       );
+      wallMeshes3D.push({ mesh, side });
     }
     function buildWall(side) {
-      const length = side === "top" ? room.w : room.h;
-      let cursor = 0;
-      wallWindows[side]
-        .sort((a, b) => a[0] - b[0])
-        .forEach(([from, to]) => {
-          const start = Math.max(cursor, Math.min(length, from)),
-            end = Math.max(start, Math.min(length, to));
-          wallSection(side, cursor, start, 0, wallH);
-          wallSection(side, start, end, 0, 0.94);
-          wallSection(side, start, end, 2.06, wallH);
-          cursor = end;
-        });
-      wallSection(side, cursor, length, 0, wallH);
+      const length = side === "top" || side === "bottom" ? room.w : room.h,
+        spans = [[0, length]];
+      spans.forEach(([spanStart, spanEnd]) => {
+        let cursor = spanStart;
+        wallWindows[side]
+          .sort((a, b) => a[0] - b[0])
+          .forEach(([from, to]) => {
+            const start = Math.max(cursor, Math.min(spanEnd, from)),
+              end = Math.max(start, Math.min(spanEnd, to));
+            wallSection(side, cursor, start, 0, wallH);
+            wallSection(side, start, end, 0, 0.94);
+            wallSection(side, start, end, 2.06, wallH);
+            cursor = end;
+          });
+        wallSection(side, cursor, spanEnd, 0, wallH);
+      });
     }
     buildWall("top");
     buildWall("left");
     buildWall("right");
+    buildWall("bottom");
     box(scene3d, room.w - th, 0.16, 0.025, "#fffdf8", room.w / 2, 0.08, 0.07);
     box(scene3d, 0.025, 0.16, room.h - th, "#fffdf8", 0.07, 0.08, room.h / 2);
     box(
@@ -1845,6 +1955,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       0.08,
       room.h / 2,
     );
+    box(scene3d, room.w - th, 0.16, 0.025, "#fffdf8", room.w / 2, 0.08, room.h - 0.07);
     items.forEach((it) => {
       const group = new THREE.Group();
       group.position.set(it.x + it.w / 2, getItemLift3D(it), it.y + it.h / 2);
@@ -1955,6 +2066,15 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
               }
             } else if (it.kind === "tv") {
               model.scale.multiplyScalar(standardTvHeight / Math.max(size.y, 0.001));
+              model.updateMatrixWorld(true);
+              const tvBounds = new THREE.Box3().setFromObject(model);
+              const tvSize = tvBounds.getSize(new THREE.Vector3());
+              const footprintScale = Math.min(
+                1,
+                fitW / Math.max(tvSize.x, 0.001),
+                fitH / Math.max(tvSize.z, 0.001),
+              );
+              model.scale.multiplyScalar(footprintScale);
             } else if (it.kind === "lamp") {
               model.scale.multiplyScalar(standardLampHeight / Math.max(size.y, 0.001));
             } else if (it.kind === "chair") {
