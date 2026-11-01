@@ -1,0 +1,20 @@
+{
+  "name": "codex-marketplace-project_web_ai-25ce840e",
+  "interface": {
+    "displayName": "Codex Plugins (Project_Web_AI)"
+  },
+  "plugins": [
+    {
+      "name": "game-studio",
+      "source": {
+        "source": "local",
+        "path": "./plugins/game-studio"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Design"
+    }
+  ]
+}
