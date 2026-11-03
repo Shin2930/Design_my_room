@@ -14,16 +14,8 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     scandi: { floor: "#e8d6bb", wall: "#fbf8f0", furniture: "#b5a18a" },
     warm: { floor: "#cda984", wall: "#f5e8d6", furniture: "#9b6c4e" },
   };
-  // Native X/Z footprint measured from assets/models/beds/bed.glb.
-  const defaultBedFootprint = { w: 1.7656, h: 2.7474 };
   const specs = {
-    bed: {
-      name: "เตียงนอน",
-      w: defaultBedFootprint.w,
-      h: defaultBedFootprint.h,
-      color: "#d9c8b8",
-      kind: "bed",
-    },
+    bed: { name: "เตียงนอน", w: 1.8, h: 2, color: "#d9c8b8", kind: "bed" },
     livingpack: { name: "ชุดเฟอร์นิเจอร์ห้องนั่งเล่น", w: 2.8, h: 2, color: "#82958a", kind: "livingpack" },
     sofa: { name: "โซฟา", w: 2, h: 0.9, color: "#82958a", kind: "sofa" },
     desk: { name: "โต๊ะทำงาน", w: 1.2, h: 0.6, color: "#bd9870", kind: "desk" },
@@ -236,7 +228,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
   const getBedFloorInset = (it) =>
     it.kind === "bed"
       ? normalizeModelUrl(it.modelUrl || glbModels.bed) === defaultBedModelUrl
-        ? 0.35
+        ? 0.65
         : bedFloorInset
       : 0;
   const standardTvHeight = 0.85;
@@ -700,10 +692,21 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     return true;
   }
   function findFreePosition(it) {
-    for (let y = 0; y <= room.h - it.h + 0.001; y += 0.25)
-      for (let x = 0; x <= room.w - it.w + 0.001; x += 0.25) {
+    const wallGap = 0.05,
+      hasWallGap = (candidate) => corners(candidate).every(
+        ([x, y]) => x >= wallGap && y >= wallGap
+          && x <= room.w - wallGap && y <= room.h - wallGap,
+      );
+    const center = {
+      x: (room.w - it.w) / 2,
+      y: (room.h - it.h) / 2,
+    };
+    const centered = { ...it, ...center };
+    if (hasWallGap(centered) && canPlace(centered, null)) return center;
+    for (let y = wallGap; y <= room.h - it.h - wallGap + 0.001; y += 0.25)
+      for (let x = wallGap; x <= room.w - it.w - wallGap + 0.001; x += 0.25) {
         const candidate = { ...it, x, y };
-        if (canPlace(candidate, null)) return { x, y };
+        if (hasWallGap(candidate) && canPlace(candidate, null)) return { x, y };
       }
     return null;
   }
@@ -1381,7 +1384,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
         ["sofa", 1.25, 0.05],
         ["tv", 1.5, 3.55],
         ["rug", 1.45, 0.85],
-        ["antique_chair", 1.05, 2.5, -Math.PI / 2],
+        ["antique_chair", 1.05, 2.5, -7 * Math.PI / 12],
         ["plant", 3.9, 0.05],
         ["lamp", 0.65, 0.05],
         ["desk", 1.7, 2.2],
@@ -1862,6 +1865,15 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     const surface = items.find((other) => other.id === it.supportId);
     return (surface ? getSurfaceHeight(surface) : 0) + (Number(it.lift) || 0);
   };
+  const getBedWallContactOffset3D = (it) => {
+    if (!isDefaultBed(it)) return { x: 0, z: 0 };
+    const offset = 0.2,
+      rotation = it.rot || 0;
+    return {
+      x: Math.sin(rotation) * offset + 0.05,
+      z: -Math.cos(rotation) * offset,
+    };
+  };
   function addBedContactShadow(parent, item) {
     if (!bedContactShadowTexture3D) {
       const canvas = document.createElement("canvas");
@@ -1900,7 +1912,12 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     // Rebuilding the entire scene on every pointermove causes visible flicker.
     if (dragging3d) {
       objectMeshes.forEach(({ mesh, it }) => {
-        mesh.position.set(it.x + it.w / 2, getItemLift3D(it), it.y + it.h / 2);
+        const bedContactOffset = getBedWallContactOffset3D(it);
+        mesh.position.set(
+          it.x + it.w / 2 + bedContactOffset.x,
+          getItemLift3D(it),
+          it.y + it.h / 2 + bedContactOffset.z,
+        );
         mesh.rotation.y = -(it.rot || 0);
       });
       return;
@@ -2036,7 +2053,12 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     box(scene3d, room.w - th, 0.16, 0.025, "#fffdf8", room.w / 2, 0.08, room.h - 0.07);
     items.forEach((it) => {
       const group = new THREE.Group();
-      group.position.set(it.x + it.w / 2, getItemLift3D(it), it.y + it.h / 2);
+      const bedContactOffset = getBedWallContactOffset3D(it);
+      group.position.set(
+        it.x + it.w / 2 + bedContactOffset.x,
+        getItemLift3D(it),
+        it.y + it.h / 2 + bedContactOffset.z,
+      );
       group.rotation.y = -(it.rot || 0);
       group.userData.itemId = it.id;
       scene3d.add(group);
@@ -2130,12 +2152,13 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
               const bedWidth = fitW;
               const bedLength = fitH;
               if (normalizeModelUrl(modelUrl) === defaultBedModelUrl) {
-                // Preserve the default GLB's native X/Z footprint. Only its
-                // vertical scale is normalized so the bed keeps a usable height.
+                const scaleX = (swapsFootprintAxes ? bedLength : bedWidth) / Math.max(size.x, 0.001);
+                const scaleZ = (swapsFootprintAxes ? bedWidth : bedLength) / Math.max(size.z, 0.001);
+                const fitScale = Math.min(scaleX, scaleZ) * (modelOptions.modelScale ?? 1);
                 model.scale.set(
-                  1,
-                  (modelOptions.modelHeight ?? standardBedHeight) / Math.max(size.y, 0.001),
-                  1,
+                  scaleX * (modelOptions.modelScale ?? 1),
+                  fitScale,
+                  scaleZ * (modelOptions.modelScale ?? 1),
                 );
               } else {
                 model.scale.set(
@@ -2202,13 +2225,21 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
               Math.abs(actualW - it.w) > 0.01
               || Math.abs(actualH - it.h) > 0.01
             );
+            const isTableSurface = ["desk", "dining", "table"].includes(it.kind);
+            const nextSurfaceHeight = isTableSurface
+              ? (modelOptions.surfaceHeight ?? scaledBox.max.y)
+              : null;
+            const surfaceHeightChanged = nextSurfaceHeight != null
+              && Math.abs((it.surfaceHeight ?? 0.75) - nextSurfaceHeight) > 0.005;
+            if (surfaceHeightChanged) it.surfaceHeight = nextSurfaceHeight;
             if (hasFootprint) {
               it.w = actualW;
               it.h = actualH;
               it.modelFootprintUrl = modelUrlKey;
               applyPlacement(it, snapDefaultBedHeadboardToWall(it));
-              group.position.x = it.x + it.w / 2;
-              group.position.z = it.y + it.h / 2;
+              const bedContactOffset = getBedWallContactOffset3D(it);
+              group.position.x = it.x + it.w / 2 + bedContactOffset.x;
+              group.position.z = it.y + it.h / 2 + bedContactOffset.z;
             }
             group.clear();
             group.add(modelRoot);
@@ -2220,6 +2251,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
             if (it.kind === "window" && windowWall(it))
               addWindowExterior(group, it.w);
             group.userData.glbLoaded = true;
+            if (surfaceHeightChanged) render3D();
             if (footprintChanged) {
               draw(false);
               if (selected?.id === it.id) updateEditor();
