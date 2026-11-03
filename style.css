@@ -257,7 +257,7 @@ button {
 }
 .catalog-browser {
   display: grid;
-  grid-template-columns: 60px minmax(0, 1fr);
+  grid-template-columns: 88px minmax(0, 1fr);
   align-items: start;
   gap: 9px;
 }
@@ -277,10 +277,12 @@ button {
 }
 .catalog-type-button {
   display: grid;
+  grid-template-rows: auto auto;
   place-items: center;
-  flex: 0 0 42px;
+  gap: 2px;
+  min-height: 54px;
   width: 100%;
-  padding: 0;
+  padding: 4px 2px;
   border: 1px solid transparent;
   border-radius: 2px;
   background: #fff;
@@ -300,8 +302,17 @@ button {
   background: var(--blue-light);
 }
 .catalog-nav-icon {
-  font-size: 21px;
+  font-size: 24px;
   line-height: 1;
+}
+.catalog-nav-label {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 .catalog-type-button:focus-visible {
   outline: 2px solid var(--blue);
@@ -516,7 +527,7 @@ canvas {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .catalog-browser {
-    grid-template-columns: 52px minmax(0, 1fr);
+    grid-template-columns: 76px minmax(0, 1fr);
     gap: 7px;
   }
   .catalog-type-nav {

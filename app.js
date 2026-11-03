@@ -14,8 +14,16 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     scandi: { floor: "#e8d6bb", wall: "#fbf8f0", furniture: "#b5a18a" },
     warm: { floor: "#cda984", wall: "#f5e8d6", furniture: "#9b6c4e" },
   };
+  // Native X/Z footprint measured from assets/models/beds/bed.glb.
+  const defaultBedFootprint = { w: 1.7656, h: 2.7474 };
   const specs = {
-    bed: { name: "เตียงนอน", w: 1.8, h: 2, color: "#d9c8b8", kind: "bed" },
+    bed: {
+      name: "เตียงนอน",
+      w: defaultBedFootprint.w,
+      h: defaultBedFootprint.h,
+      color: "#d9c8b8",
+      kind: "bed",
+    },
     livingpack: { name: "ชุดเฟอร์นิเจอร์ห้องนั่งเล่น", w: 2.8, h: 2, color: "#82958a", kind: "livingpack" },
     sofa: { name: "โซฟา", w: 2, h: 0.9, color: "#82958a", kind: "sofa" },
     desk: { name: "โต๊ะทำงาน", w: 1.2, h: 0.6, color: "#bd9870", kind: "desk" },
@@ -219,13 +227,16 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     importedModels.map((model) => [normalizeModelUrl(model.model), model]),
   );
   const defaultBedModelUrl = normalizeModelUrl(glbModels.bed);
+  const isDefaultBed = (it) =>
+    it.kind === "bed" &&
+    normalizeModelUrl(it.modelUrl || glbModels.bed) === defaultBedModelUrl;
   const malfoyModelUrl = importedModels.find((model) => model.id === "malfoy_character")?.model;
   const standardBedHeight = 0.95;
   const bedFloorInset = 0.04;
   const getBedFloorInset = (it) =>
     it.kind === "bed"
       ? normalizeModelUrl(it.modelUrl || glbModels.bed) === defaultBedModelUrl
-        ? 0.65
+        ? 0.35
         : bedFloorInset
       : 0;
   const standardTvHeight = 0.85;
@@ -479,12 +490,15 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     ].map(([x, y]) => [cx + x * c - y * s, cy + x * s + y * c]);
   }
   function clampToRoom(it) {
+    // Walls are 0.12 m thick and their centers sit on the room boundary,
+    // so usable space starts/ends 0.06 m inside. Keep furniture from overlapping.
+    const wallInset = 0.06;
     const c = Math.abs(Math.cos(it.rot || 0)),
       s = Math.abs(Math.sin(it.rot || 0)),
       halfW = (c * it.w + s * it.h) / 2,
       halfH = (s * it.w + c * it.h) / 2,
-      cx = Math.max(halfW, Math.min(room.w - halfW, it.x + it.w / 2)),
-      cy = Math.max(halfH, Math.min(room.h - halfH, it.y + it.h / 2));
+      cx = Math.max(halfW + wallInset, Math.min(room.w - halfW - wallInset, it.x + it.w / 2)),
+      cy = Math.max(halfH + wallInset, Math.min(room.h - halfH - wallInset, it.y + it.h / 2));
     return { ...it, x: cx - it.w / 2, y: cy - it.h / 2 };
   }
   function snapDoorToWall(it) {
@@ -515,6 +529,46 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     const x = Math.max(it.w / 2, Math.min(room.w - it.w / 2, cx)),
       y = wall === "top" ? it.h / 2 : room.h - it.h / 2;
     return { ...it, x: x - it.w / 2, y: y - it.h / 2, rot };
+  }
+  function snapDefaultBedHeadboardToWall(it) {
+    if (!isDefaultBed(it)) return it;
+    const wallInset = 0.06,
+      snapDistance = 0.35,
+      rot = it.rot || 0,
+      centerX = it.x + it.w / 2,
+      centerY = it.y + it.h / 2,
+      // The default model is normalized so its headboard points along local -Y.
+      headboardX = centerX + Math.sin(rot) * (it.h / 2),
+      headboardY = centerY - Math.cos(rot) * (it.h / 2),
+      [wall, gap] = [
+        ["left", headboardX - wallInset],
+        ["right", room.w - wallInset - headboardX],
+        ["top", headboardY - wallInset],
+        ["bottom", room.h - wallInset - headboardY],
+      ].reduce((closest, candidate) =>
+        candidate[1] < closest[1] ? candidate : closest,
+      );
+    if (gap > snapDistance) return it;
+
+    let snapped;
+    if (wall === "left") {
+      snapped = {
+        ...it,
+        rot: -Math.PI / 2,
+        x: wallInset + it.h / 2 - it.w / 2,
+      };
+    } else if (wall === "right") {
+      snapped = {
+        ...it,
+        rot: Math.PI / 2,
+        x: room.w - wallInset - it.h / 2 - it.w / 2,
+      };
+    } else if (wall === "top") {
+      snapped = { ...it, rot: 0, y: wallInset };
+    } else {
+      snapped = { ...it, rot: Math.PI, y: room.h - wallInset - it.h };
+    }
+    return clampToRoom(snapped);
   }
   function windowWall(it) {
     if (it.kind !== "window") return null;
@@ -550,17 +604,20 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     const polygon = corners(surface);
     return corners(it).every(([x, y]) => {
       let inside = false;
+      let onBoundary = false;
       for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
         const [xi, yi] = polygon[i], [xj, yj] = polygon[j];
         const dx = xj - xi, dy = yj - yi,
           cross = (x - xi) * dy - (y - yi) * dx,
           dot = (x - xi) * dx + (y - yi) * dy;
-        if (Math.abs(cross) < 1e-6 && dot >= -1e-6 && dot <= dx * dx + dy * dy + 1e-6)
-          return true;
+        if (Math.abs(cross) < 1e-6 && dot >= -1e-6 && dot <= dx * dx + dy * dy + 1e-6) {
+          onBoundary = true;
+          continue;
+        }
         if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi)
           inside = !inside;
       }
-      return inside;
+      return onBoundary || inside;
     });
   }
   function moveWithSurface(it, from, to) {
@@ -584,7 +641,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
   }
   function moveSupportedItems(from, to) {
     items.forEach((it) => {
-      if (it.supportId === from.id) Object.assign(it, moveWithSurface(it, from, to));
+      if (it.supportId === from.id) applyPlacement(it, moveWithSurface(it, from, to));
     });
   }
   function placeOnSurface(it) {
@@ -594,6 +651,12 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     if (surface) return { ...it, supportId: surface.id };
     const { supportId, ...onFloor } = it;
     return onFloor;
+  }
+  function applyPlacement(target, source) {
+    Object.assign(target, source);
+    if (!Object.prototype.hasOwnProperty.call(source, "supportId"))
+      delete target.supportId;
+    return target;
   }
   function overlaps(a, b) {
     if (a.kind === "rug" || b.kind === "rug") return false;
@@ -618,7 +681,8 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     if (!insideRoom(candidate)) return false;
     const attached = items.filter((it) => it.supportId === candidate.id),
       attachedIds = new Set(attached.map((it) => it.id)),
-      carried = attached.map((it) => moveWithSurface(it, items.find((item) => item.id === candidate.id), candidate));
+      sourceSurface = items.find((item) => item.id === candidate.id) || candidate,
+      carried = attached.map((it) => moveWithSurface(it, sourceSurface, candidate));
     if (
       carried.some((it) => !insideRoom(it) || !fitsOnSurface(it, candidate)) ||
       items.some((other) =>
@@ -876,11 +940,19 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     ctx.restore();
   }
   function draw(updateScene3D = true) {
-    items.forEach((it) => {
-      const support = items.find((other) => other.id === it.supportId);
-      if (it.supportId && (!support || !fitsOnSurface(it, support)))
-        delete it.supportId;
-    });
+    const detachIds = new Set(
+      items
+        .filter((it) => {
+          if (!it.supportId) return false;
+          const support = items.find((other) => other.id === it.supportId);
+          return !support || !fitsOnSurface(it, support);
+        })
+        .map((it) => it.id),
+    );
+    if (detachIds.size)
+      items.forEach((it) => {
+        if (detachIds.has(it.id)) delete it.supportId;
+      });
     const cw = parseFloat(canvas.style.width) || canvas.width,
       ch = parseFloat(canvas.style.height) || canvas.height;
     ctx.clearRect(0, 0, cw, ch);
@@ -979,6 +1051,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     snapshot();
     it.x = pos.x;
     it.y = pos.y;
+    applyPlacement(it, snapDefaultBedHeadboardToWall(it));
     items.push(it);
     selected = it;
     draw();
@@ -1103,7 +1176,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       const placement = placeOnSurface(candidate);
       if (canPlace(placement, it.id)) {
         moveSupportedItems(it, placement);
-        Object.assign(it, placement);
+        applyPlacement(it, placement);
         if (it.modelFitW != null) {
           it.modelFitW = it.w;
           it.modelFitH = it.h;
@@ -1122,10 +1195,11 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       y: dragging.origY + (p.y - dragging.startY) / view.unit,
     });
     candidate = snapDoorToWall(candidate);
+    candidate = snapDefaultBedHeadboardToWall(candidate);
     candidate = placeOnSurface(candidate);
     if (canPlace(candidate, it.id)) {
       moveSupportedItems(it, candidate);
-      Object.assign(it, candidate);
+      applyPlacement(it, candidate);
     }
     $("objectX").value = it.x.toFixed(1);
     $("objectY").value = it.y.toFixed(1);
@@ -1231,7 +1305,10 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       const iconNode = document.createElement("span");
       iconNode.className = "catalog-nav-icon";
       iconNode.textContent = icon;
-      button.append(iconNode);
+      const labelNode = document.createElement("span");
+      labelNode.className = "catalog-nav-label";
+      labelNode.textContent = label;
+      button.append(iconNode, labelNode);
       navButtons.push(button);
     };
 
@@ -1344,6 +1421,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       y,
       rot,
     }));
+    items.forEach((it) => applyPlacement(it, snapDefaultBedHeadboardToWall(it)));
     selected = null;
     $("roomW").value = room.w;
     $("roomH").value = room.h;
@@ -1492,8 +1570,8 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
         Number($(which === "w" ? "objectW" : "objectH").value) || 0.5,
       ),
     );
-    const candidate = snapDoorToWall(
-      clampToRoom({ ...selected, [which]: v }),
+    const candidate = snapDefaultBedHeadboardToWall(
+      snapDoorToWall(clampToRoom({ ...selected, [which]: v })),
     );
     if (!canPlace(candidate, selected.id)) {
       status(
@@ -1506,7 +1584,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     }
     snapshot();
     moveSupportedItems(selected, candidate);
-    Object.assign(selected, candidate);
+    applyPlacement(selected, candidate);
     if (selected.modelFitW != null) {
       selected.modelFitW = selected.w;
       selected.modelFitH = selected.h;
@@ -1518,11 +1596,11 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
   $("objectH").addEventListener("change", () => updateDimension("h"));
   function updatePosition() {
     if (!selected) return;
-    const candidate = placeOnSurface(snapDoorToWall(clampToRoom({
+    const candidate = placeOnSurface(snapDefaultBedHeadboardToWall(snapDoorToWall(clampToRoom({
       ...selected,
       x: Number($("objectX").value) || 0,
       y: Number($("objectY").value) || 0,
-    })));
+    }))));
     if (!canPlace(candidate, selected.id)) {
       status(
         insideRoom(candidate)
@@ -1534,7 +1612,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     }
     snapshot();
     moveSupportedItems(selected, candidate);
-    Object.assign(selected, candidate);
+    applyPlacement(selected, candidate);
     draw();
     updateEditor();
   }
@@ -1555,7 +1633,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     }
     snapshot();
     moveSupportedItems(selected, candidate);
-    Object.assign(selected, candidate);
+    applyPlacement(selected, candidate);
     draw();
   }
   $("deleteBtn").addEventListener("click", () => {
@@ -1761,10 +1839,10 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       x: point.x - it.w / 2,
       y: point.z - it.h / 2,
     });
-    candidate = placeOnSurface(snapDoorToWall(candidate));
+    candidate = placeOnSurface(snapDefaultBedHeadboardToWall(snapDoorToWall(candidate)));
     if (canPlace(candidate, it.id)) {
       moveSupportedItems(it, candidate);
-      Object.assign(it, candidate);
+      applyPlacement(it, candidate);
     }
     $("objectX").value = it.x.toFixed(1);
     $("objectY").value = it.y.toFixed(1);
@@ -2052,10 +2130,13 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
               const bedWidth = fitW;
               const bedLength = fitH;
               if (normalizeModelUrl(modelUrl) === defaultBedModelUrl) {
-                const scaleX = (swapsFootprintAxes ? bedLength : bedWidth) / Math.max(size.x, 0.001);
-                const scaleZ = (swapsFootprintAxes ? bedWidth : bedLength) / Math.max(size.z, 0.001);
-                const fitScale = Math.min(scaleX, scaleZ) * (modelOptions.modelScale ?? 1);
-                model.scale.set(scaleX * (modelOptions.modelScale ?? 1), fitScale, scaleZ * (modelOptions.modelScale ?? 1));
+                // Preserve the default GLB's native X/Z footprint. Only its
+                // vertical scale is normalized so the bed keeps a usable height.
+                model.scale.set(
+                  1,
+                  (modelOptions.modelHeight ?? standardBedHeight) / Math.max(size.y, 0.001),
+                  1,
+                );
               } else {
                 model.scale.set(
                   ((swapsFootprintAxes ? bedLength : bedWidth) / Math.max(size.x, 0.001)) * model.scale.x,
@@ -2125,6 +2206,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
               it.w = actualW;
               it.h = actualH;
               it.modelFootprintUrl = modelUrlKey;
+              applyPlacement(it, snapDefaultBedHeadboardToWall(it));
               group.position.x = it.x + it.w / 2;
               group.position.z = it.y + it.h / 2;
             }
