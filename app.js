@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { importedModels } from "./assets/models/catalog.js?v=20261104-expanded-models";
+import { importedModels } from "./assets/models/catalog.js?v=20261104-rug-doormat-size";
 import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js";
 import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/utils/SkeletonUtils.js";
@@ -179,9 +179,11 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     exteriorTexture3D.offset.x = 0.18;
     return exteriorTexture3D;
   }
-  function addWindowExterior(parent, width) {
+  function addWindowExterior(parent, width, round = false) {
     const exterior = new THREE.Mesh(
-      new THREE.PlaneGeometry(width * 0.88 * 0.9 * 0.95, 0.9),
+      round
+        ? new THREE.CircleGeometry(width * 0.44, 32)
+        : new THREE.PlaneGeometry(width * 0.88 * 0.9 * 0.95, 0.9),
       new THREE.MeshBasicMaterial({
         map: getExteriorTexture3D(),
         side: THREE.DoubleSide,
@@ -242,6 +244,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       });
   };
   const glbCache = new Map();
+  const previewModelCache = new Map();
   const modelLoadStates = new Map();
   const modelLabels = {
     bed: "เตียง", sofa: "โซฟา", desk: "โต๊ะทำงาน", dining: "โต๊ะอาหาร",
@@ -321,6 +324,82 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       }));
     }
     return glbCache.get(url);
+  }
+  const previewJobs = [];
+  let previewJobActive = false, previewRenderer, previewScene, previewCamera;
+  function renderModelPreview(image, url) {
+    if (!url || image.dataset.previewQueued) return;
+    image.dataset.previewQueued = "true";
+    previewJobs.push(async () => {
+      try {
+        if (!previewModelCache.has(url)) previewModelCache.set(url, new Promise((resolve, reject) =>
+          gltfLoader.load(url, (gltf) => resolve(gltf.scene), undefined, reject),
+        ));
+        const source = await previewModelCache.get(url),
+          model = SkeletonUtils.clone(source),
+          bounds = new THREE.Box3().setFromObject(model),
+          size = bounds.getSize(new THREE.Vector3()),
+          center = bounds.getCenter(new THREE.Vector3()),
+          scale = 2.2 / Math.max(size.x, size.y, size.z, 0.001);
+        model.scale.multiplyScalar(scale);
+        model.position.sub(center.multiplyScalar(scale));
+        model.rotation.y += Math.PI / 5;
+        if (!previewRenderer) {
+          previewRenderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+          previewRenderer.setSize(96, 96);
+          previewRenderer.setClearColor("#f3f5f6");
+          previewRenderer.outputColorSpace = THREE.SRGBColorSpace;
+          previewScene = new THREE.Scene();
+          previewScene.add(new THREE.HemisphereLight(0xffffff, 0x77716a, 2));
+          const light = new THREE.DirectionalLight(0xffffff, 2);
+          light.position.set(3, 5, 4);
+          previewScene.add(light);
+          previewCamera = new THREE.PerspectiveCamera(36, 1, 0.01, 20);
+          previewCamera.position.set(2.5, 1.8, 2.5);
+          previewCamera.lookAt(0, 0, 0);
+        }
+        previewScene.add(model);
+        previewRenderer.render(previewScene, previewCamera);
+        image.src = previewRenderer.domElement.toDataURL("image/webp", 0.82);
+        previewScene.remove(model);
+      } catch {
+        image.classList.add("preview-unavailable");
+      }
+    });
+    if (!previewJobActive) {
+      previewJobActive = true;
+      const next = async () => {
+        const job = previewJobs.shift();
+        if (job) {
+          await job();
+          requestAnimationFrame(next);
+        } else previewJobActive = false;
+      };
+      requestAnimationFrame(next);
+    }
+  }
+  const previewObserver = "IntersectionObserver" in window
+    ? new IntersectionObserver((entries) => entries.forEach(({ target, isIntersecting }) => {
+        if (!isIntersecting) return;
+        previewObserver.unobserve(target);
+        renderModelPreview(target, target.dataset.previewModel);
+      }), { rootMargin: "120px" })
+    : null;
+  function catalogPreview(container, modelUrl, imageUrl) {
+    const image = document.createElement("img");
+    image.className = "model-preview";
+    image.alt = "";
+    image.loading = "lazy";
+    image.decoding = "async";
+    if (imageUrl) {
+      image.src = `${imageUrl}?v=20261104-preview-fill`;
+      image.addEventListener("error", () => renderModelPreview(image, modelUrl), { once: true });
+    } else {
+      image.dataset.previewModel = modelUrl || "";
+      if (previewObserver) previewObserver.observe(image);
+      else renderModelPreview(image, modelUrl);
+    }
+    container.replaceChildren(image);
   }
   function normalizeTvWomanHead(model) {
     const pants = model.getObjectByName("Object_120");
@@ -492,7 +571,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     return { ...it, x: cx - it.w / 2, y: cy - it.h / 2 };
   }
   function snapDoorToWall(it) {
-    if (it.kind !== "door" && it.kind !== "window") return it;
+    if (it.kind !== "door" && it.kind !== "window" && !it.wallMountable) return it;
     const cx = it.x + it.w / 2,
       cy = it.y + it.h / 2,
       points = corners(it),
@@ -508,17 +587,18 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
         b[1] < a[1] || (b[1] === a[1] && b[2] < a[2]) ? b : a,
       );
     if (gap > 0.35) return it;
+    const wallMountHeight = it.wallMountable ? { lift: it.lift ?? 1.5 } : {};
     let rot = 0;
     if (wall === "left" || wall === "right") {
       rot = wall === "left" ? -Math.PI / 2 : Math.PI / 2;
       const x = wall === "left" ? it.h / 2 : room.w - it.h / 2,
         y = Math.max(it.w / 2, Math.min(room.h - it.w / 2, cy));
-      return { ...it, x: x - it.w / 2, y: y - it.h / 2, rot };
+      return { ...it, ...wallMountHeight, x: x - it.w / 2, y: y - it.h / 2, rot };
     }
     rot = wall === "top" ? 0 : Math.PI;
     const x = Math.max(it.w / 2, Math.min(room.w - it.w / 2, cx)),
       y = wall === "top" ? it.h / 2 : room.h - it.h / 2;
-    return { ...it, x: x - it.w / 2, y: y - it.h / 2, rot };
+    return { ...it, ...wallMountHeight, x: x - it.w / 2, y: y - it.h / 2, rot };
   }
   function snapDefaultBedHeadboardToWall(it) {
     if (!isDefaultBed(it)) return it;
@@ -573,6 +653,21 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       [wall, distance] = walls.reduce((a, b) => (b[1] < a[1] ? b : a));
     return distance < 0.02 ? wall : null;
   }
+  function wallMountSide(it) {
+    if (!it.wallMountable) return null;
+    const cx = it.x + it.w / 2,
+      cy = it.y + it.h / 2,
+      walls = [
+        ["left", Math.abs(cx - it.h / 2)],
+        ["right", Math.abs(cx - (room.w - it.h / 2))],
+        ["top", Math.abs(cy - it.h / 2)],
+        ["bottom", Math.abs(cy - (room.h - it.h / 2))],
+      ],
+      [wall, distance] = walls.reduce((a, b) => (b[1] < a[1] ? b : a));
+    return distance < 0.02 ? wall : null;
+  }
+  const isRoundWindow = (it) =>
+    it.windowShape === "round" || normalizeModelUrl(it.modelUrl || "").endsWith("round-window.glb");
   function insideRoom(it) {
     return corners(it).every(
       ([x, y]) =>
@@ -591,24 +686,16 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
   const getPlaceableOn = (it) => it.placeableOn || (it.kind === "tv" ? ["table"] : []);
   function fitsOnSurface(it, surface) {
     if (!getPlaceableOn(it).includes(getSurfaceType(surface))) return false;
-    const polygon = corners(surface);
-    return corners(it).every(([x, y]) => {
-      let inside = false;
-      let onBoundary = false;
-      for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-        const [xi, yi] = polygon[i], [xj, yj] = polygon[j];
-        const dx = xj - xi, dy = yj - yi,
-          cross = (x - xi) * dy - (y - yi) * dx,
-          dot = (x - xi) * dx + (y - yi) * dy;
-        if (Math.abs(cross) < 1e-6 && dot >= -1e-6 && dot <= dx * dx + dy * dy + 1e-6) {
-          onBoundary = true;
-          continue;
-        }
-        if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi)
-          inside = !inside;
-      }
-      return onBoundary || inside;
-    });
+    const polygon = corners(surface),
+      x = it.x + it.w / 2,
+      y = it.y + it.h / 2;
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const [xi, yi] = polygon[i], [xj, yj] = polygon[j];
+      if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi)
+        inside = !inside;
+    }
+    return inside;
   }
   function moveWithSurface(it, from, to) {
     const oldRotation = from.rot || 0,
@@ -764,15 +851,13 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     ctx.translate(cx, cy);
     ctx.rotate(it.rot || 0);
     ctx.fillStyle = "rgba(31,39,32,.13)";
-    roundRect(
-      ctx,
-      -w / 2 + 2,
-      -h / 2 + 3,
-      w,
-      h,
-      Math.min(9, u * 0.08),
-      ctx.fillStyle,
-    );
+    if (isRoundWindow(it)) {
+      ctx.beginPath();
+      ctx.arc(2, 3, Math.max(5, Math.min(10, Math.min(w, h) * 0.45)), 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      roundRect(ctx, -w / 2 + 2, -h / 2 + 3, w, h, Math.min(9, u * 0.08), ctx.fillStyle);
+    }
     const color = it.color;
     if (it.kind === "rug") {
       roundRect(ctx, -w / 2, -h / 2, w, h, 5, color, "rgba(88,74,58,.55)");
@@ -880,15 +965,25 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
         ctx.fill();
       }
     } else if (it.kind === "window") {
-      ctx.fillStyle = "#d6edf5";
-      ctx.fillRect(-w / 2, -Math.max(3, h / 2), w, Math.max(6, h));
-      ctx.strokeStyle = "#6e9eae";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(-w / 2, -Math.max(3, h / 2), w, Math.max(6, h));
-      ctx.beginPath();
-      ctx.moveTo(0, -h / 2);
-      ctx.lineTo(0, h / 2);
-      ctx.stroke();
+      if (isRoundWindow(it)) {
+        ctx.beginPath();
+        ctx.arc(0, 0, Math.max(5, Math.min(10, Math.min(w, h) * 0.45)), 0, Math.PI * 2);
+        ctx.fillStyle = "#d6edf5";
+        ctx.fill();
+        ctx.strokeStyle = "#6e9eae";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = "#d6edf5";
+        ctx.fillRect(-w / 2, -Math.max(3, h / 2), w, Math.max(6, h));
+        ctx.strokeStyle = "#6e9eae";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-w / 2, -Math.max(3, h / 2), w, Math.max(6, h));
+        ctx.beginPath();
+        ctx.moveTo(0, -h / 2);
+        ctx.lineTo(0, h / 2);
+        ctx.stroke();
+      }
     } else if (it.kind === "door") {
       ctx.fillStyle = "#d9c3a5";
       ctx.fillRect(-w / 2, -Math.max(3, h / 2), w, Math.max(6, h));
@@ -1005,7 +1100,14 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       ctx.fillStyle = "#d6edf5";
       ctx.strokeStyle = "#6e9eae";
       ctx.lineWidth = 1.5;
-      if (side === "top") {
+      if (isRoundWindow(it)) {
+        const markX = side === "left" ? x : side === "right" ? x + w : cx;
+        const markY = side === "top" ? y : side === "bottom" ? y + h : cy;
+        ctx.beginPath();
+        ctx.arc(markX, markY, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else if (side === "top") {
         ctx.fillRect(cx - span / 2, y - 7, span, 15);
         ctx.strokeRect(cx - span / 2, y - 7, span, 15);
       } else if (side === "bottom") {
@@ -1069,8 +1171,11 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     $("objectH").value = selected.h;
     $("objectX").value = selected.x.toFixed(1);
     $("objectY").value = selected.y.toFixed(1);
-    $("objectLift").value = (Number(selected.lift) || 0).toFixed(1);
-    $("liftField").hidden = !getPlaceableOn(selected).length;
+    $("objectLift").value = Number(selected.lift ?? (wallMountSide(selected) ? 1.5 : 0)).toFixed(1);
+    $("liftField").hidden = !getPlaceableOn(selected).length && !selected.wallMountable;
+    $("liftField").querySelector("label").textContent = selected.wallMountable
+      ? "ความสูงจากพื้น (เมตร)"
+      : "ยกอุปกรณ์สูงเพิ่ม (เมตร)";
   }
   function getPointer(e) {
     const r = canvas.getBoundingClientRect();
@@ -1201,6 +1306,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     if (canPlace(candidate, it.id)) {
       moveSupportedItems(it, candidate);
       applyPlacement(it, candidate);
+      if (it.wallMountable) $("objectLift").value = Number(it.lift ?? 1.5).toFixed(1);
     }
     $("objectX").value = it.x.toFixed(1);
     $("objectY").value = it.y.toFixed(1);
@@ -1220,10 +1326,13 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       placeableOn: model.placeableOn,
       surfaceType: model.surfaceType,
       surfaceHeight: model.surfaceHeight,
+      wallMountable: model.wallMountable,
+      preview: model.preview,
       modelUrl: model.model,
       axis: model.axis,
       rotationY: model.rotationY,
       visibleMeshes: model.visibleMeshes,
+      windowShape: model.windowShape,
     };
     const button = document.createElement("button");
     button.type = "button";
@@ -1231,14 +1340,23 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     button.dataset.type = model.id;
     button.dataset.category = model.category;
     const icon = document.createElement("span");
-    icon.className = "emoji";
-    icon.textContent = model.icon;
+    icon.className = "model-preview-slot";
+    catalogPreview(icon, model.model, model.preview);
     const name = document.createElement("b");
     name.textContent = model.name;
     const dimensions = document.createElement("small");
     dimensions.textContent = `${model.w} × ${model.h} ม. · โมเดล GLB`;
     button.append(icon, name, dimensions);
     $("catalog").append(button);
+  });
+  document.querySelectorAll(".furn").forEach((button) => {
+    const slot = button.querySelector(".model-preview-slot");
+    if (!slot) return;
+    const spec = specs[button.dataset.type];
+    catalogPreview(slot, spec?.modelUrl || glbModels[button.dataset.type], spec?.preview);
+  });
+  document.querySelectorAll(".template-icon").forEach((slot) => {
+    slot.textContent = { bedroom: "🛏️", living: "🛋️", office: "🖥️" }[slot.parentElement.dataset.template];
   });
   document
     .querySelectorAll(".furn")
@@ -1555,7 +1673,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     }
   });
   $("objectLift").addEventListener("change", () => {
-    if (!selected || !getPlaceableOn(selected).length) return;
+    if (!selected || (!getPlaceableOn(selected).length && !selected.wallMountable)) return;
     snapshot();
     selected.lift = Math.max(0, Math.min(2.4, Number($("objectLift").value) || 0));
     $("objectLift").value = selected.lift.toFixed(1);
@@ -1799,7 +1917,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
         id: found.id,
         startX: e.clientX,
         startY: e.clientY,
-        startLift: Number(found.lift) || 0,
+        startLift: Number(found.lift ?? (wallMountSide(found) ? 1.5 : 0)) || 0,
         moved: false,
       };
       controls3d.enabled = false;
@@ -1815,7 +1933,6 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
   $("plan3d").addEventListener("pointermove", (e) => {
     if (!dragging3d || !renderer3d) return;
     const point = pointerToFloor(e);
-    if (!point) return;
     const it = items.find((i) => i.id === dragging3d.id);
     if (!it) return;
     if (
@@ -1829,12 +1946,13 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     }
     if (!dragging3d.moved) return;
     // Drag vertically with the mouse while keeping the object on its current floor position.
-    if (getPlaceableOn(it).length && e.shiftKey) {
+    if ((getPlaceableOn(it).length || it.wallMountable) && e.shiftKey) {
       it.lift = Math.max(0, Math.min(2.4, dragging3d.startLift + (dragging3d.startY - e.clientY) * 0.012));
       $("objectLift").value = it.lift.toFixed(1);
       draw();
       return;
     }
+    if (!point) return;
     let candidate = clampToRoom({
       ...it,
       x: point.x - it.w / 2,
@@ -1844,6 +1962,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     if (canPlace(candidate, it.id)) {
       moveSupportedItems(it, candidate);
       applyPlacement(it, candidate);
+      if (it.wallMountable) $("objectLift").value = Number(it.lift ?? 1.5).toFixed(1);
     }
     $("objectX").value = it.x.toFixed(1);
     $("objectY").value = it.y.toFixed(1);
@@ -1860,6 +1979,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
   $("plan3d").addEventListener("pointercancel", endDrag3D);
   const getItemLift3D = (it) => {
     if (it.kind === "bed") return -getBedFloorInset(it);
+    if (wallMountSide(it)) return Number(it.lift ?? 1.5) || 0;
     const surface = items.find((other) => other.id === it.supportId);
     return (surface ? getSurfaceHeight(surface) : 0) + (Number(it.lift) || 0);
   };
@@ -1994,10 +2114,15 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       const center = side === "top" || side === "bottom"
         ? it.x + it.w / 2
         : it.y + it.h / 2;
-      wallWindows[side].push([
-        center - it.w * 0.45 * 0.95,
-        center + it.w * 0.45 * 0.95,
-      ]);
+      const round = isRoundWindow(it),
+        radius = round ? Math.min(it.w / 2, 0.56) : 0,
+        halfOpening = round ? radius : it.w * 0.45 * 0.95;
+      wallWindows[side].push({
+        from: center - halfOpening,
+        to: center + halfOpening,
+        round,
+        radius,
+      });
     });
     function wallSection(side, start, end, low, high) {
       if (end - start < 0.04 || high - low < 0.04) return;
@@ -2014,19 +2139,49 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       );
       wallMeshes3D.push({ mesh, side });
     }
+    function roundWindowSurround(side, center, radius) {
+      const shape = new THREE.Shape();
+      shape.moveTo(-radius, -radius);
+      shape.lineTo(radius, -radius);
+      shape.lineTo(radius, radius);
+      shape.lineTo(-radius, radius);
+      shape.closePath();
+      const hole = new THREE.Path();
+      hole.absarc(0, 0, radius, 0, Math.PI * 2, true);
+      shape.holes.push(hole);
+      const mesh = new THREE.Mesh(
+        new THREE.ExtrudeGeometry(shape, { depth: th, bevelEnabled: false, curveSegments: 32 }),
+        mat(room.wall),
+      );
+      mesh.receiveShadow = true;
+      if (side === "top" || side === "bottom") {
+        mesh.position.set(center, 1.5, (side === "top" ? 0 : room.h) - th / 2);
+      } else {
+        mesh.rotation.y = side === "left" ? -Math.PI / 2 : Math.PI / 2;
+        mesh.position.set(side === "left" ? th / 2 : room.w - th / 2, 1.5, center);
+      }
+      scene3d.add(mesh);
+      wallMeshes3D.push({ mesh, side });
+    }
     function buildWall(side) {
       const length = side === "top" || side === "bottom" ? room.w : room.h,
         spans = [[0, length]];
       spans.forEach(([spanStart, spanEnd]) => {
         let cursor = spanStart;
         wallWindows[side]
-          .sort((a, b) => a[0] - b[0])
-          .forEach(([from, to]) => {
+          .sort((a, b) => a.from - b.from)
+          .forEach(({ from, to, round, radius }) => {
             const start = Math.max(cursor, Math.min(spanEnd, from)),
               end = Math.max(start, Math.min(spanEnd, to));
             wallSection(side, cursor, start, 0, wallH);
-            wallSection(side, start, end, 0, 0.94);
-            wallSection(side, start, end, 2.06, wallH);
+            if (round) {
+              wallSection(side, start, end, 0, 1.5 - radius);
+              roundWindowSurround(side, (start + end) / 2, radius);
+              wallSection(side, start, end, 1.5 + radius, wallH);
+            } else {
+              wallSection(side, start, end, 0, 0.94);
+              wallSection(side, start, end, 2.06, wallH);
+            }
             cursor = end;
           });
         wallSection(side, cursor, spanEnd, 0, wallH);
@@ -2145,7 +2300,9 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
             const scale = it.kind === "character"
               ? 1.65 / Math.max(size.y, 0.001)
               : footprintScale;
-            if (it.kind === "bed") {
+            if (modelOptions.preserveModelScale) {
+              model.scale.multiplyScalar(modelOptions.modelScale ?? 1);
+            } else if (it.kind === "bed") {
               const swapsFootprintAxes = Math.abs(Math.sin(bedRotationY)) > Math.SQRT1_2;
               const bedWidth = fitW;
               const bedLength = fitH;
@@ -2196,7 +2353,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
             } else {
               scaledBox = new THREE.Box3().setFromObject(model);
             }
-            if (it.kind === "window") {
+            if (it.kind === "window" && !modelOptions.preserveModelScale) {
               const scaledSize = new THREE.Vector3();
               scaledBox.getSize(scaledSize);
               model.scale.y *= 1.12 / scaledSize.y;
@@ -2247,7 +2404,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
               group.position.y = -getBedFloorInset(it);
             }
             if (it.kind === "window" && windowWall(it))
-              addWindowExterior(group, it.w);
+              addWindowExterior(group, it.w, isRoundWindow(it));
             group.userData.glbLoaded = true;
             if (surfaceHeightChanged) render3D();
             if (footprintChanged) {
@@ -2320,7 +2477,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
           box(group, w, 0.07, 0.08, frame, 0, 0.98, 0);
           box(group, 0.07, 1.08, 0.08, frame, -w / 2 + 0.035, 1.5, 0);
           box(group, 0.07, 1.08, 0.08, frame, w / 2 - 0.035, 1.5, 0);
-          if (windowWall(it)) addWindowExterior(group, w);
+          if (windowWall(it)) addWindowExterior(group, w, isRoundWindow(it));
           const pane = new THREE.Mesh(
             new THREE.BoxGeometry(w * 0.88, 0.9, 0.025),
             new THREE.MeshStandardMaterial({
