@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { importedModels } from "./assets/models/catalog.js?v=20261105-imported-models";
+import { importedModels } from "./assets/models/catalog.js?v=20261106-import-model";
 import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js";
 import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/utils/SkeletonUtils.js";
