@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { importedModels } from "./assets/models/catalog.js?v=20261101-tabletop-support";
+import { importedModels } from "./assets/models/catalog.js?v=20261104-expanded-models";
 import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js";
 import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/utils/SkeletonUtils.js";
@@ -16,7 +16,6 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
   };
   const specs = {
     bed: { name: "เตียงนอน", w: 1.8, h: 2, color: "#d9c8b8", kind: "bed" },
-    livingpack: { name: "ชุดเฟอร์นิเจอร์ห้องนั่งเล่น", w: 2.8, h: 2, color: "#82958a", kind: "livingpack" },
     sofa: { name: "โซฟา", w: 2, h: 0.9, color: "#82958a", kind: "sofa" },
     desk: { name: "โต๊ะทำงาน", w: 1.2, h: 0.6, color: "#bd9870", kind: "desk" },
     dining: {
@@ -199,7 +198,6 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     dining: "assets/models/tables/modern_table.glb",
     wardrobe: "assets/models/wardrobes/wardrobe.glb",
     tv: "assets/models/tvs/tv.glb",
-    livingpack: "assets/models/sets/tinylivingpack.glb",
     plant: "assets/models/plants/plant_pot.glb",
     rug: "assets/models/rugs/carpet.glb",
     chair: "assets/models/chairs/modern_chair.glb",
@@ -247,9 +245,9 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
   const modelLoadStates = new Map();
   const modelLabels = {
     bed: "เตียง", sofa: "โซฟา", desk: "โต๊ะทำงาน", dining: "โต๊ะอาหาร",
-    wardrobe: "ตู้เสื้อผ้า", tv: "โทรทัศน์", livingpack: "ชุดห้องนั่งเล่น",
+    wardrobe: "ตู้เสื้อผ้า", tv: "โทรทัศน์",
     plant: "ต้นไม้", rug: "พรม", chair: "เก้าอี้", lamp: "โคมไฟ",
-    window: "หน้าต่าง", door: "ประตู", table: "โต๊ะ", character: "ตัวละคร",
+    window: "หน้าต่าง", door: "ประตู", table: "โต๊ะ", decor: "อุปกรณ์และของตกแต่ง", character: "ตัวละคร",
   };
   function updateModelLoadUI(state) {
     const list = $("modelLoadList");
@@ -1249,7 +1247,6 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     all: "\u0e17\u0e31\u0e49\u0e07\u0e2b\u0e21\u0e14",
     bed: "เตียง",
     sofa: "โซฟา",
-    livingpack: "ชุดห้องนั่งเล่น",
     desk: "โต๊ะทำงาน",
     dining: "โต๊ะอาหาร",
     table: "โต๊ะ",
@@ -1261,12 +1258,12 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     lamp: "โคมไฟ",
     window: "หน้าต่าง",
     door: "ประตู",
+    decor: "อุปกรณ์และของตกแต่ง",
     character: "ตัวละคร",
   };
   const catalogKindIcons = {
     bed: "🛏️",
     sofa: "🛋️",
-    livingpack: "🛋️",
     desk: "🖥️",
     dining: "🍽️",
     table: "🪵",
@@ -1278,6 +1275,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     lamp: "💡",
     window: "▤",
     door: "🚪",
+    decor: "🔌",
     character: "🧙",
   };
   const catalogButtons = [...document.querySelectorAll(".furn")];
@@ -2124,7 +2122,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
             else if (it.kind === "tv") model.rotation.y += tvRotationY;
             else if (it.kind === "chair") model.rotation.y += chairRotationY + Math.PI;
             else if (it.kind === "table") model.rotation.y += tableRotationY + tableTurnY;
-            else if (it.kind === "window") model.rotation.y -= Math.PI / 2;
+            else if (it.kind === "window") model.rotation.y += modelOptions.windowRotationY ?? -Math.PI / 2;
             else if (it.kind === "character") {
               modelRoot.rotation.set(
                 characterRotationX,
@@ -2227,7 +2225,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
             );
             const isTableSurface = ["desk", "dining", "table"].includes(it.kind);
             const nextSurfaceHeight = isTableSurface
-              ? (modelOptions.surfaceHeight ?? scaledBox.max.y)
+              ? (modelOptions.surfaceHeight ?? (scaledBox.max.y - scaledBox.min.y))
               : null;
             const surfaceHeightChanged = nextSurfaceHeight != null
               && Math.abs((it.surfaceHeight ?? 0.75) - nextSurfaceHeight) > 0.005;
