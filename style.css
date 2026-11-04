@@ -86,7 +86,7 @@ button {
 .app {
   height: calc(100vh - 60px);
   display: grid;
-  grid-template-columns: 300px minmax(360px, 1fr) 280px;
+  grid-template-columns: 420px minmax(360px, 1fr) 280px;
   min-height: 0;
 }
 .sidebar {
@@ -238,15 +238,15 @@ button {
 .template-icon,
 .model-preview-slot {
   display: grid;
-  flex: 0 0 48px;
-  width: 48px;
-  height: 48px;
+  flex: 0 0 64px;
+  width: 64px;
+  height: 64px;
   margin: 0 auto 7px;
   place-items: center;
 }
 .model-preview-slot .model-preview {
-  width: 24px;
-  height: 24px;
+  width: 56px;
+  height: 56px;
   object-fit: contain;
 }
 .template-icon {
@@ -268,7 +268,7 @@ button {
 }
 .catalog {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 .catalog-browser {
@@ -366,8 +366,8 @@ button {
   outline-offset: 2px;
 }
 .furn .model-preview {
-  width: 24px;
-  height: 24px;
+  width: 56px;
+  height: 56px;
   margin: 0;
   border-radius: 4px;
   background: #f3f5f6;

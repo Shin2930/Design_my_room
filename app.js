@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { importedModels } from "./assets/models/catalog.js?v=20261104-rug-doormat-size";
+import { importedModels } from "./assets/models/catalog.js?v=20261105-imported-models";
 import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js";
 import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/utils/SkeletonUtils.js";
@@ -1344,9 +1344,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     catalogPreview(icon, model.model, model.preview);
     const name = document.createElement("b");
     name.textContent = model.name;
-    const dimensions = document.createElement("small");
-    dimensions.textContent = `${model.w} × ${model.h} ม. · โมเดล GLB`;
-    button.append(icon, name, dimensions);
+    button.append(icon, name);
     $("catalog").append(button);
   });
   document.querySelectorAll(".furn").forEach((button) => {
