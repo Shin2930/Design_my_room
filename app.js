@@ -2001,6 +2001,21 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       z: -Math.cos(rotation) * offset,
     };
   };
+  const getWallContactOffset3D = (it) => {
+    const bedOffset = getBedWallContactOffset3D(it);
+    if (it.kind !== "door") return bedOffset;
+    const configuredOffset =
+      getImportedModelOptions(it.modelUrl)?.doorWallOffset
+      ?? it.doorWallOffset
+      ?? 0;
+    const offset = Number(configuredOffset) || 0;
+    if (!offset) return bedOffset;
+    const rotation = it.rot || 0;
+    return {
+      x: bedOffset.x - Math.sin(rotation) * offset,
+      z: bedOffset.z + Math.cos(rotation) * offset,
+    };
+  };
   function addBedContactShadow(parent, item) {
     if (!bedContactShadowTexture3D) {
       const canvas = document.createElement("canvas");
@@ -2039,11 +2054,11 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     // Rebuilding the entire scene on every pointermove causes visible flicker.
     if (dragging3d) {
       objectMeshes.forEach(({ mesh, it }) => {
-        const bedContactOffset = getBedWallContactOffset3D(it);
+        const wallContactOffset = getWallContactOffset3D(it);
         mesh.position.set(
-          it.x + it.w / 2 + bedContactOffset.x,
+          it.x + it.w / 2 + wallContactOffset.x,
           getItemLift3D(it),
-          it.y + it.h / 2 + bedContactOffset.z,
+          it.y + it.h / 2 + wallContactOffset.z,
         );
         mesh.rotation.y = -(it.rot || 0);
       });
@@ -2215,11 +2230,11 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     box(scene3d, room.w - th, 0.16, 0.025, "#fffdf8", room.w / 2, 0.08, room.h - 0.07);
     items.forEach((it) => {
       const group = new THREE.Group();
-      const bedContactOffset = getBedWallContactOffset3D(it);
+      const wallContactOffset = getWallContactOffset3D(it);
       group.position.set(
-        it.x + it.w / 2 + bedContactOffset.x,
+        it.x + it.w / 2 + wallContactOffset.x,
         getItemLift3D(it),
-        it.y + it.h / 2 + bedContactOffset.z,
+        it.y + it.h / 2 + wallContactOffset.z,
       );
       group.rotation.y = -(it.rot || 0);
       group.userData.itemId = it.id;
@@ -2242,6 +2257,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
           const bedRotationY = modelOptions.bedRotationY ?? it.bedRotationY ?? Math.PI;
           const sofaRotationY = modelOptions.sofaRotationY ?? it.sofaRotationY ?? Math.PI / 2;
           const tvRotationY = modelOptions.tvRotationY ?? it.tvRotationY ?? 0;
+            const doorRotationY = modelOptions.doorRotationY ?? it.doorRotationY ?? 0;
           const chairRotationY = modelOptions.chairRotationY ?? it.chairRotationY ?? Math.PI / 2;
           const tableRotationY = modelOptions.tableRotationY ?? it.tableRotationY ?? Math.PI * 1.5;
           const tableTurnY = modelOptions.id && modelOptions.id !== "table" ? Math.PI / 2 : 0;
@@ -2284,6 +2300,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
               modelRoot.rotation.y = bedRotationY;
             } else if (it.kind === "sofa") model.rotation.y += sofaRotationY;
             else if (it.kind === "tv") model.rotation.y += tvRotationY;
+            else if (it.kind === "door") model.rotation.y += doorRotationY;
             else if (it.kind === "chair") model.rotation.y += chairRotationY + Math.PI;
             else if (it.kind === "table" || it.kind === "desk") model.rotation.y += tableRotationY + tableTurnY;
             else if (it.kind === "dining") model.rotation.y += modelOptions.diningRotationY ?? it.diningRotationY ?? Math.PI / 2;
@@ -2312,7 +2329,17 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
             const scale = it.kind === "character"
               ? 1.65 / Math.max(size.y, 0.001)
               : footprintScale;
-            if (modelOptions.preserveModelScale) {
+            if (it.kind === "character") {
+              const standardCharacterHeight = 1.65;
+              modelRoot.scale.setScalar(
+                standardCharacterHeight / Math.max(size.y, 0.001),
+              );
+            } else if (it.kind === "table") {
+              const standardTableHeight = 0.85;
+              model.scale.multiplyScalar(footprintScale);
+              model.scale.y *= standardTableHeight
+                / Math.max(size.y * footprintScale, 0.001);
+            } else if (modelOptions.preserveModelScale) {
               model.scale.multiplyScalar(modelOptions.modelScale ?? 1);
             } else if (it.kind === "bed") {
               const swapsFootprintAxes = Math.abs(Math.sin(bedRotationY)) > Math.SQRT1_2;
@@ -2347,7 +2374,10 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
               );
               model.scale.multiplyScalar(footprintScale);
             } else if (it.kind === "lamp") {
-              model.scale.multiplyScalar(standardLampHeight / Math.max(size.y, 0.001));
+              model.scale.multiplyScalar(
+                (standardLampHeight / Math.max(size.y, 0.001))
+                * (modelOptions.heightScale ?? it.heightScale ?? 1),
+              );
             } else if (it.kind === "chair") {
               model.scale.multiplyScalar(
                 (standardChairHeight / Math.max(size.y, 0.001))
@@ -2360,20 +2390,15 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
                 (fitH / Math.max(size.z, 0.001)) * (modelOptions.modelScale ?? 1),
               );
             } else {
-              if (it.kind === "character") modelRoot.scale.multiplyScalar(scale);
-              else {
-                model.scale.multiplyScalar(scale);
-                const heightScale = modelOptions.heightScale ?? it.heightScale;
-                if ((it.kind === "desk" || it.kind === "dining" || it.kind === "wardrobe" || it.kind === "plant") && heightScale != null) {
-                  model.scale.y *= heightScale;
-                }
+              model.scale.multiplyScalar(scale);
+              const heightScale = modelOptions.heightScale ?? it.heightScale;
+              if ((it.kind === "desk" || it.kind === "dining" || it.kind === "wardrobe" || it.kind === "plant" || it.kind === "door" || (it.kind === "decor" && it.id === "steel_frame_shelves_01")) && heightScale != null) {
+                model.scale.y *= heightScale;
               }
             }
             let scaledBox;
             if (it.kind === "character") {
-              scaledBox = box3.clone();
-              scaledBox.min.multiplyScalar(scale);
-              scaledBox.max.multiplyScalar(scale);
+              scaledBox = new THREE.Box3().setFromObject(modelRoot);
             } else {
               scaledBox = new THREE.Box3().setFromObject(model);
             }
@@ -2435,10 +2460,16 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
               it.w = actualW;
               it.h = actualH;
               it.modelFootprintUrl = modelUrlKey;
-              applyPlacement(it, snapDefaultBedHeadboardToWall(it));
-              const bedContactOffset = getBedWallContactOffset3D(it);
-              group.position.x = it.x + it.w / 2 + bedContactOffset.x;
-              group.position.z = it.y + it.h / 2 + bedContactOffset.z;
+              applyPlacement(
+                it,
+                it.kind === "door"
+                  ? snapDoorToWall(it)
+                  : snapDefaultBedHeadboardToWall(it),
+              );
+              const wallContactOffset = getWallContactOffset3D(it);
+              group.position.x = it.x + it.w / 2 + wallContactOffset.x;
+              group.position.z = it.y + it.h / 2 + wallContactOffset.z;
+              group.rotation.y = -(it.rot || 0);
             }
             group.clear();
             group.add(modelRoot);
