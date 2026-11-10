@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { importedModels } from "./assets/models/catalog.js?v=20261106-import-model";
+import { importedModels } from "./assets/models/catalog.js?v=20261111-descriptive-catalog-names";
 import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/libs/meshopt_decoder.module.js";
@@ -58,7 +58,8 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
   let items = [],
     selected = null,
     dragging = null,
-    history = [];
+    history = [],
+    redoHistory = [];
   let view = { scale: 1, ox: 0, oy: 0, unit: 90 };
   let scene3d = null,
     camera3d = null,
@@ -402,7 +403,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     image.loading = "lazy";
     image.decoding = "async";
     if (imageUrl) {
-      image.src = `${imageUrl}?v=20261104-preview-fill`;
+      image.src = `${imageUrl}?v=20261111-preview-framing-fix`;
       image.addEventListener("error", () => renderModelPreview(image, modelUrl), { once: true });
     } else {
       image.dataset.previewModel = modelUrl || "";
@@ -552,6 +553,27 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       JSON.stringify({ room, items, selectedId: selected?.id || null }),
     );
     if (history.length > 40) history.shift();
+    redoHistory = [];
+  }
+  function restoreSnapshot(serialized, statusMessage) {
+    const state = JSON.parse(serialized);
+    room = state.room;
+    items = state.items;
+    selected = items.find((item) => item.id === state.selectedId) || null;
+    $("roomW").value = room.w;
+    $("roomH").value = room.h;
+    $("floorColor").value = room.floor;
+    $("wallColor").value = room.wall;
+    $("showGrid").checked = room.grid;
+    document
+      .querySelectorAll(".style-btn")
+      .forEach((button) =>
+        button.classList.toggle("active", button.dataset.style === room.style),
+      );
+    $("roomTitle").textContent = "ห้องของฉัน";
+    resizeCanvas();
+    updateEditor();
+    status(statusMessage);
   }
   function corners(it) {
     const a = it.rot || 0,
@@ -1352,7 +1374,11 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     button.dataset.category = model.category;
     const icon = document.createElement("span");
     icon.className = "model-preview-slot";
-    catalogPreview(icon, model.model, model.preview);
+    catalogPreview(
+      icon,
+      model.model,
+      model.preview || `assets/models/previews/${model.id}.webp`,
+    );
     const name = document.createElement("b");
     name.textContent = model.name;
     button.append(icon, name);
@@ -1362,7 +1388,14 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     const slot = button.querySelector(".model-preview-slot");
     if (!slot) return;
     const spec = specs[button.dataset.type];
-    catalogPreview(slot, spec?.modelUrl || glbModels[button.dataset.type], spec?.preview);
+    const previewId = spec?.modelUrl
+      ? button.dataset.type
+      : `default-${button.dataset.type}`;
+    catalogPreview(
+      slot,
+      spec?.modelUrl || glbModels[button.dataset.type],
+      spec?.preview || `assets/models/previews/${previewId}.webp`,
+    );
   });
   document.querySelectorAll(".template-icon").forEach((slot) => {
     slot.textContent = { bedroom: "🛏️", living: "🛋️", office: "🖥️" }[slot.parentElement.dataset.template];
@@ -1779,65 +1812,23 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       status("ไม่มีรายการให้ย้อนกลับ");
       return;
     }
-    const s = JSON.parse(last);
-    room = s.room;
-    items = s.items;
-    selected = items.find((i) => i.id === s.selectedId) || null;
-    $("roomW").value = room.w;
-    $("roomH").value = room.h;
-    $("floorColor").value = room.floor;
-    $("wallColor").value = room.wall;
-    $("showGrid").checked = room.grid;
-    document
-      .querySelectorAll(".style-btn")
-      .forEach((b) =>
-        b.classList.toggle("active", b.dataset.style === room.style),
-      );
-    $("roomTitle").textContent = "ห้องของฉัน";
-    resizeCanvas();
-    updateEditor();
-    status("ย้อนกลับแล้ว");
+    redoHistory.push(
+      JSON.stringify({ room, items, selectedId: selected?.id || null }),
+    );
+    if (redoHistory.length > 40) redoHistory.shift();
+    restoreSnapshot(last, "ย้อนกลับแล้ว");
   });
-  function project() {
-    return { version: 1, room, items, updatedAt: new Date().toISOString() };
-  }
-  $("saveBtn").addEventListener("click", () => {
-    try {
-      localStorage.setItem("roomStudioProject", JSON.stringify(project()));
-      status("บันทึกแบบไว้ในเบราว์เซอร์แล้ว");
-    } catch (e) {
-      status("บันทึกไม่สำเร็จ");
-    }
-  });
-  $("loadBtn").addEventListener("click", () => {
-    const raw = localStorage.getItem("roomStudioProject");
-    if (!raw) {
-      status("ยังไม่มีแบบที่บันทึกไว้");
+  $("redoBtn").addEventListener("click", () => {
+    const next = redoHistory.pop();
+    if (!next) {
+      status("ไม่มีรายการให้ไปข้างหน้า");
       return;
     }
-    try {
-      snapshot();
-      const p = JSON.parse(raw);
-      room = p.room;
-      items = p.items || [];
-      selected = null;
-      $("roomW").value = room.w;
-      $("roomH").value = room.h;
-      $("floorColor").value = room.floor;
-      $("wallColor").value = room.wall;
-      $("showGrid").checked = room.grid;
-      document
-        .querySelectorAll(".style-btn")
-        .forEach((b) =>
-          b.classList.toggle("active", b.dataset.style === room.style),
-        );
-      $("roomTitle").textContent = "ห้องของฉัน";
-      resizeCanvas();
-      updateEditor();
-      status("โหลดแบบสำเร็จ");
-    } catch (e) {
-      status("ไฟล์บันทึกเสียหาย");
-    }
+    history.push(
+      JSON.stringify({ room, items, selectedId: selected?.id || null }),
+    );
+    if (history.length > 40) history.shift();
+    restoreSnapshot(next, "ไปข้างหน้าแล้ว");
   });
   $("newBtn").addEventListener("click", () => {
     if (!confirm("เริ่มแบบใหม่และลบเฟอร์นิเจอร์ทั้งหมดหรือไม่?")) return;
@@ -2282,7 +2273,10 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
               model.updateMatrixWorld(true);
               model.traverse((node) => {
                 if (!node.isMesh || !node.visible) return;
-                if (node.isSkinnedMesh) node.skeleton.update();
+                if (node.isSkinnedMesh) {
+                  node.skeleton.update();
+                  node.computeBoundingBox();
+                }
                 const meshBounds = new THREE.Box3().setFromObject(node);
                 if (visibleCharacterMeshes?.length && !visibleCharacterMeshes.includes(node.name)) {
                   node.visible = false;
@@ -2314,6 +2308,8 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
                 0,
               );
               modelRoot.add(model);
+            } else {
+              model.rotation.y += modelOptions.rotationY ?? it.rotationY ?? 0;
             }
             const transformRoot = it.kind === "character" ? modelRoot : model;
             const box3 = it.kind === "character"
@@ -2398,7 +2394,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
             }
             let scaledBox;
             if (it.kind === "character") {
-              scaledBox = new THREE.Box3().setFromObject(modelRoot);
+              scaledBox = getVisibleMeshBounds(modelRoot);
             } else {
               scaledBox = new THREE.Box3().setFromObject(model);
             }
