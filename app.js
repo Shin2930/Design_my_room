@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { importedModels } from "./assets/models/catalog.js?v=20261106-import-model";
 import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js";
+import { MeshoptDecoder } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/libs/meshopt_decoder.module.js";
 import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/utils/SkeletonUtils.js";
 
 (() => {
@@ -16,8 +17,8 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
   };
   const specs = {
     bed: { name: "เตียงนอน", w: 1.8, h: 2, color: "#d9c8b8", kind: "bed" },
-    sofa: { name: "โซฟา", w: 2, h: 0.9, color: "#82958a", kind: "sofa" },
-    desk: { name: "โต๊ะทำงาน", w: 1.2, h: 0.6, color: "#bd9870", kind: "desk" },
+    sofa: { name: "โซฟา", w: 0.7, h: 2, color: "#82958a", kind: "sofa" },
+    desk: { name: "โต๊ะทำงาน 19", w: 1.6, h: 0.5, color: "#bd9870", tableRotationY: Math.PI / 2, kind: "desk" },
     dining: {
       name: "โต๊ะอาหาร",
       w: 1.4,
@@ -167,6 +168,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
   }
   let dragging3d = null;
   const gltfLoader = new GLTFLoader();
+  gltfLoader.setMeshoptDecoder(MeshoptDecoder);
   // วางไฟล์ .glb ไว้ในโฟลเดอร์ assets/models/<ประเภท> แล้วตั้ง path ให้ตรงกับรายการนี้
   let exteriorTexture3D = null;
   function getExteriorTexture3D() {
@@ -196,7 +198,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
   const glbModels = {
     bed: "assets/models/beds/bed.glb",
     sofa: "assets/models/sofas/sofa.glb",
-    desk: "assets/models/tables/modern_table.glb",
+    desk: "assets/models/work_desks/desk_19.glb",
     dining: "assets/models/tables/modern_table.glb",
     wardrobe: "assets/models/wardrobes/wardrobe.glb",
     tv: "assets/models/tvs/tv.glb",
@@ -233,6 +235,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       : 0;
   const standardTvHeight = 0.85;
   const standardChairHeight = 1.0;
+  const standardSofaHeight = 0.7;
   const standardLampHeight = 1.5;
   let bedContactShadowTexture3D = null;
   const getImportedModelOptions = (url) => {
@@ -309,6 +312,13 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     if (!glbCache.has(url)) {
       glbCache.set(url, new Promise((resolve, reject) => {
         gltfLoader.load(url, (gltf) => {
+          if (url.includes("table_chair_sets") || url.includes("indoor_pot_plant_3")) {
+            gltf.scene.traverse((node) => {
+              if (node.isMesh && node.geometry?.attributes?.position?.count != null && node.geometry.attributes.position.count < 200) {
+                node.visible = false;
+              }
+            });
+          }
           state.status = "ready";
           updateModelLoadUI(state);
           resolve(gltf.scene);
@@ -684,11 +694,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       ? (getSurfaceType(it) === "table" ? 0.75 : 0)
       : Number(it.surfaceHeight) || 0;
   const getPlaceableOn = (it) => it.placeableOn || (it.kind === "tv" ? ["table"] : []);
-  function fitsOnSurface(it, surface) {
-    if (!getPlaceableOn(it).includes(getSurfaceType(surface))) return false;
-    const polygon = corners(surface),
-      x = it.x + it.w / 2,
-      y = it.y + it.h / 2;
+  function pointInPolygon(x, y, polygon) {
     let inside = false;
     for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
       const [xi, yi] = polygon[i], [xj, yj] = polygon[j];
@@ -696,6 +702,11 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
         inside = !inside;
     }
     return inside;
+  }
+  function fitsOnSurface(it, surface) {
+    if (!getPlaceableOn(it).includes(getSurfaceType(surface))) return false;
+    const polygon = corners(surface);
+    return corners(it).every(([x, y]) => pointInPolygon(x, y, polygon));
   }
   function moveWithSurface(it, from, to) {
     const oldRotation = from.rot || 0,
@@ -2228,11 +2239,11 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
           }
           const fitW = it.modelFitW ?? it.w;
           const fitH = it.modelFitH ?? it.h;
-          const bedRotationY = modelOptions.bedRotationY ?? Math.PI;
-          const sofaRotationY = modelOptions.sofaRotationY ?? Math.PI / 2;
-          const tvRotationY = modelOptions.tvRotationY ?? 0;
-          const chairRotationY = modelOptions.chairRotationY ?? Math.PI / 2;
-          const tableRotationY = modelOptions.tableRotationY ?? Math.PI * 1.5;
+          const bedRotationY = modelOptions.bedRotationY ?? it.bedRotationY ?? Math.PI;
+          const sofaRotationY = modelOptions.sofaRotationY ?? it.sofaRotationY ?? Math.PI / 2;
+          const tvRotationY = modelOptions.tvRotationY ?? it.tvRotationY ?? 0;
+          const chairRotationY = modelOptions.chairRotationY ?? it.chairRotationY ?? Math.PI / 2;
+          const tableRotationY = modelOptions.tableRotationY ?? it.tableRotationY ?? Math.PI * 1.5;
           const tableTurnY = modelOptions.id && modelOptions.id !== "table" ? Math.PI / 2 : 0;
           // GLTFLoader already applies the GLB scene's up-axis conversion; keep
           // characters upright unless a specific model defines an extra tilt.
@@ -2274,7 +2285,10 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
             } else if (it.kind === "sofa") model.rotation.y += sofaRotationY;
             else if (it.kind === "tv") model.rotation.y += tvRotationY;
             else if (it.kind === "chair") model.rotation.y += chairRotationY + Math.PI;
-            else if (it.kind === "table") model.rotation.y += tableRotationY + tableTurnY;
+            else if (it.kind === "table" || it.kind === "desk") model.rotation.y += tableRotationY + tableTurnY;
+            else if (it.kind === "dining") model.rotation.y += modelOptions.diningRotationY ?? it.diningRotationY ?? Math.PI / 2;
+            else if (it.kind === "wardrobe") model.rotation.y += modelOptions.wardrobeRotationY ?? it.wardrobeRotationY ?? 0;
+            else if (it.kind === "rug") model.rotation.y += modelOptions.rugRotationY ?? it.rugRotationY ?? 0;
             else if (it.kind === "window") model.rotation.y += modelOptions.windowRotationY ?? -Math.PI / 2;
             else if (it.kind === "character") {
               modelRoot.rotation.set(
@@ -2339,9 +2353,21 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
                 (standardChairHeight / Math.max(size.y, 0.001))
                 * (modelOptions.chairScale ?? 1),
               );
+            } else if (it.kind === "sofa") {
+              model.scale.set(
+                (fitW / Math.max(size.x, 0.001)) * (modelOptions.modelScale ?? 1),
+                (standardSofaHeight / Math.max(size.y, 0.001)) * (modelOptions.modelScale ?? 1),
+                (fitH / Math.max(size.z, 0.001)) * (modelOptions.modelScale ?? 1),
+              );
             } else {
               if (it.kind === "character") modelRoot.scale.multiplyScalar(scale);
-              else model.scale.multiplyScalar(scale);
+              else {
+                model.scale.multiplyScalar(scale);
+                const heightScale = modelOptions.heightScale ?? it.heightScale;
+                if ((it.kind === "desk" || it.kind === "dining" || it.kind === "wardrobe" || it.kind === "plant") && heightScale != null) {
+                  model.scale.y *= heightScale;
+                }
+              }
             }
             let scaledBox;
             if (it.kind === "character") {
@@ -2369,7 +2395,27 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
             });
             if (it.kind === "bed") modelRoot.add(model);
             modelRoot.updateMatrixWorld(true);
-            const footprintBounds = getVisibleMeshBounds(modelRoot);
+            let footprintBounds = getVisibleMeshBounds(modelRoot);
+            // พรมบางโมเดลมี geometry/origin ต่ำกว่าระดับพื้น จัดฐานให้แตะพื้นพอดี
+            if (it.kind === "rug" && !footprintBounds.isEmpty()) {
+              // ยกพรมพ้นผิวพื้นเล็กน้อย ป้องกัน Z-fighting ที่ทำให้ลายพรมกระพริบ/ดูไม่ชัด
+              const rugFloorClearance = 0.012;
+              transformRoot.position.y += rugFloorClearance - footprintBounds.min.y;
+              modelRoot.updateMatrixWorld(true);
+              footprintBounds = getVisibleMeshBounds(modelRoot);
+              model.traverse((node) => {
+                if (!node.isMesh) return;
+                node.renderOrder = 2;
+                const materials = Array.isArray(node.material) ? node.material : [node.material];
+                materials.forEach((material) => {
+                  if (!material) return;
+                  material.polygonOffset = true;
+                  material.polygonOffsetFactor = -1;
+                  material.polygonOffsetUnits = -1;
+                  material.needsUpdate = true;
+                });
+              });
+            }
             const footprintSize = footprintBounds.getSize(new THREE.Vector3());
             const hasFootprint = !footprintBounds.isEmpty();
             const actualW = hasFootprint ? Math.max(0.001, footprintSize.x) : it.w;
