@@ -79,8 +79,9 @@ http://localhost:8000/
 │   ├── models/catalog.js      รายการโมเดล ชื่อ หมวดหมู่ และขนาดตั้งต้น
 │   ├── models/CREDITS.md      แหล่งที่มาและสัญญาอนุญาตของโมเดล
 │   ├── models/*/*.glb         โมเดลเฟอร์นิเจอร์และของตกแต่ง
-│   └── models/previews/       ภาพตัวอย่างสำหรับแค็ตตาล็อก
-├── ikea-roomstudio-comparison.png  ภาพประกอบการเปรียบเทียบ
+│   ├── models/previews/       ภาพตัวอย่างสำหรับแค็ตตาล็อก
+│   └── picture/
+├── import_model/
 └── plugins/                   สคริปต์และไฟล์เครื่องมือประกอบโปรเจกต์
 ```
 
