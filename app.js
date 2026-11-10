@@ -403,7 +403,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     image.loading = "lazy";
     image.decoding = "async";
     if (imageUrl) {
-      image.src = `${imageUrl}?v=20261111-preview-framing-fix`;
+      image.src = `${imageUrl}?v=20261111-preview-fit-v2`;
       image.addEventListener("error", () => renderModelPreview(image, modelUrl), { once: true });
     } else {
       image.dataset.previewModel = modelUrl || "";
@@ -1350,6 +1350,9 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     dragging = null;
   });
   importedModels.forEach((model) => {
+    const previewUrl = ["tv", "chair", "door", "window", "character"].includes(model.kind)
+      ? `assets/models/previews/${model.id}.webp`
+      : model.preview || `assets/models/previews/${model.id}.webp`;
     specs[model.id] = {
       name: model.name,
       w: model.w,
@@ -1360,7 +1363,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
       surfaceType: model.surfaceType,
       surfaceHeight: model.surfaceHeight,
       wallMountable: model.wallMountable,
-      preview: model.preview,
+      preview: previewUrl,
       modelUrl: model.model,
       axis: model.axis,
       rotationY: model.rotationY,
@@ -1377,7 +1380,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     catalogPreview(
       icon,
       model.model,
-      model.preview || `assets/models/previews/${model.id}.webp`,
+      previewUrl,
     );
     const name = document.createElement("b");
     name.textContent = model.name;
