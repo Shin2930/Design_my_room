@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { importedModels } from "./assets/models/catalog.js?v=20261111-descriptive-catalog-names";
+import { importedModels } from "./assets/models/catalog.js?v=20261111-sofa-3seat-rotation-360";
 import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/libs/meshopt_decoder.module.js";
@@ -2407,10 +2407,22 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
               model.scale.y *= 1.12 / scaledSize.y;
               scaledBox = new THREE.Box3().setFromObject(model);
             }
-            const modelCenter = scaledBox.getCenter(new THREE.Vector3());
-            transformRoot.position.x -= modelCenter.x;
-            transformRoot.position.y += (it.kind === "window" ? 0.94 : 0) - scaledBox.min.y;
-            transformRoot.position.z -= modelCenter.z;
+            if (it.kind === "character") {
+              // Keep source-model offsets in the scaled pivot's coordinate space.
+              const modelCenter = box3.getCenter(new THREE.Vector3());
+              transformRoot.position.set(
+                -modelCenter.x * scale,
+                -box3.min.y * scale,
+                -modelCenter.z * scale,
+              );
+              modelRoot.updateMatrixWorld(true);
+              scaledBox = getVisibleMeshBounds(modelRoot);
+            } else {
+              const modelCenter = scaledBox.getCenter(new THREE.Vector3());
+              transformRoot.position.x -= modelCenter.x;
+              transformRoot.position.y += (it.kind === "window" ? 0.94 : 0) - scaledBox.min.y;
+              transformRoot.position.z -= modelCenter.z;
+            }
             model.traverse((node) => {
               if (node.isMesh) {
                 node.castShadow = it.kind !== "bed";

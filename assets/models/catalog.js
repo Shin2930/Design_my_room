@@ -153,7 +153,7 @@ export const importedModels = [
   { id: "imported_sofa_old_plaid_sofa", sofaRotationY: -Math.PI / 2, name: "โซฟาลายตารางวินเทจ", kind: "sofa", category: "furniture", w: 0.7, h: 2, color: "#82958a", model: "assets/models/sofas/old_plaid_sofa.glb" },
   { id: "imported_sofa_scifi_sofa", sofaRotationY: -Math.PI / 2, name: "โซฟาดีไซน์ไซไฟ", kind: "sofa", category: "furniture", w: 0.7, h: 2, color: "#82958a", model: "assets/models/sofas/scifi_sofa.glb" },
   { id: "imported_sofa_sofa_2", name: "โซฟาทรงยาวดีไซน์คลาสสิก", kind: "sofa", category: "furniture", w: 0.7, h: 2, color: "#82958a", model: "assets/models/sofas/sofa_2.glb" },
-  { id: "imported_sofa_sofa_3", name: "โซฟาโมเดิร์นสามที่นั่ง", kind: "sofa", category: "furniture", w: 2, h: 0.7, color: "#82958a", model: "assets/models/sofas/sofa_3.glb" },
+  { id: "imported_sofa_sofa_3", sofaRotationY: Math.PI * 2, name: "โซฟาโมเดิร์นสามที่นั่ง", kind: "sofa", category: "furniture", w: 2, h: 0.7, color: "#82958a", model: "assets/models/sofas/sofa_3.glb" },
   { id: "imported_sofa_sofa", sofaRotationY: Math.PI * 2, name: "โซฟาดีไซน์เรียบหรู", kind: "sofa", category: "furniture", w: 2, h: 0.7, color: "#82958a", model: "assets/models/sofas/sofa_01_imported.glb" },
   { id: "imported_sofa_sofa_chair", sofaRotationY: Math.PI * 2, name: "เก้าอี้โซฟาเดี่ยว", kind: "sofa", category: "furniture", w: 1.0, h: 1.0, color: "#82958a", model: "assets/models/sofas/sofa_chair.glb" },
   { id: "imported_sofa_vintage_sofa", name: "โซฟาสไตล์วินเทจ", kind: "sofa", category: "furniture", w: 0.7, h: 2, color: "#82958a", model: "assets/models/sofas/vintage_sofa.glb" },
