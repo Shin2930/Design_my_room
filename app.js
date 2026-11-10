@@ -1486,7 +1486,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.160.1/examp
     let visible = 0;
     catalogButtons.forEach((button) => {
       const matches =
-        button.dataset.kind === catalogType &&
+        (query !== "" || button.dataset.kind === catalogType) &&
         button.textContent.toLocaleLowerCase().includes(query);
       button.hidden = !matches;
       if (matches) visible++;
